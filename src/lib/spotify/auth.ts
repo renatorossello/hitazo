@@ -166,17 +166,23 @@ export async function getValidAccessToken(
   if (access && Date.now() < expiresAt - 60_000) return { token: access, applyCookies: noop };
   if (!refresh) return { token: null, applyCookies: noop };
 
-  const tok = await requestTokens(
-    new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: refresh,
-      client_id: clientId(),
-    })
-  );
-  return {
-    token: tok.access_token,
-    applyCookies: (res) => persistTokens(res, tok, refresh),
-  };
+  try {
+    const tok = await requestTokens(
+      new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: refresh,
+        client_id: clientId(),
+      })
+    );
+    return {
+      token: tok.access_token,
+      applyCookies: (res) => persistTokens(res, tok, refresh),
+    };
+  } catch {
+    // Refresh token revocado/expirado: la sesión murió. Limpiamos las cookies para
+    // que el host vuelva a ver "Conectar con Spotify" en vez de un estado falso.
+    return { token: null, applyCookies: (res) => clearSpotifySession(res) };
+  }
 }
 
 /** Lectura para Server Components (solo lee, no escribe). */

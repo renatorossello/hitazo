@@ -11,7 +11,9 @@ export async function GET(req: NextRequest) {
   const { token, applyCookies } = await getValidAccessToken(req);
 
   if (!token) {
-    return NextResponse.json({ error: "no_session" }, { status: 401 });
+    const res = NextResponse.json({ error: "no_session" }, { status: 401 });
+    applyCookies(res); // limpia cookies si el refresh estaba revocado
+    return res;
   }
 
   const res = NextResponse.json({ access_token: token });

@@ -73,7 +73,10 @@ export async function searchTracks(
 
   const out: SpotifyTrack[] = [];
   let offset = 0;
-  const pageSize = 50;
+  // Spotify redujo el máximo de `limit` de Search a 10 (default 5); antes era 50.
+  // Paginamos de a `pageSize` respetando ese tope. Para el seed (max=1) → limit=1.
+  const SPOTIFY_SEARCH_LIMIT = 10;
+  const pageSize = Math.min(SPOTIFY_SEARCH_LIMIT, max);
 
   while (out.length < max) {
     const url = `https://api.spotify.com/v1/search?type=track&limit=${pageSize}&offset=${offset}&q=${q}`;
