@@ -51,6 +51,8 @@ export default function AdminPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (res.status === 401) return setMsg("No hay sesión de host. Conectate con Spotify en /host.");
+      if (res.status === 403)
+        return setMsg("Spotify denegó el acceso a la playlist. Reconectá Spotify (ahora pedimos el permiso de playlists): andá a /host → Cerrar sesión → Conectar de nuevo, y reintentá.");
       if (res.status === 404) return setMsg("No se pudo acceder a la playlist. ¿Es una editorial de Spotify? Esas están restringidas; usá una playlist de usuario.");
       if (!res.ok) return setMsg(`Error: ${data.error}`);
       setMsg(`Importadas ${data.imported} canciones al mazo "${data.deckName}". Ahora resolvé los años abajo.`);

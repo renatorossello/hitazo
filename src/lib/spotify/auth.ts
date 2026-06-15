@@ -20,6 +20,8 @@ export const SPOTIFY_SCOPES = [
   "user-read-private",
   "user-modify-playback-state", // play/pause/transfer al device del SDK
   "user-read-playback-state",
+  "playlist-read-private", // leer las playlists del host (admin de mazos)
+  "playlist-read-collaborative",
 ].join(" ");
 
 const ACCESS_COOKIE = "sp_access";

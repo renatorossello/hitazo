@@ -235,6 +235,7 @@ export async function fetchPlaylistTracks(
     const url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100&offset=${offset}&fields=${encodeURIComponent(fields)}`;
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
     if (res.status === 401) throw new SpotifyAuthError("Token de Spotify vencido o inválido.");
+    if (res.status === 403) throw new Error("playlist_forbidden");
     if (res.status === 404) throw new Error("playlist_not_found");
     if (res.status === 429) {
       const retry = Number(res.headers.get("retry-after") ?? "2");
