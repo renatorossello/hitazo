@@ -59,6 +59,14 @@ export async function getUsedCardIds(
   const { data: rounds } = await supabase.from("ct_rounds").select("card_id").eq("game_id", gameId);
   for (const r of rounds ?? []) if (r.card_id) used.add(r.card_id);
 
+  // Cartas salteadas por el host en esta partida.
+  const { data: game } = await supabase
+    .from("ct_games")
+    .select("skipped_card_ids")
+    .eq("id", gameId)
+    .maybeSingle();
+  for (const id of (game?.skipped_card_ids as string[] | null) ?? []) used.add(id);
+
   return used;
 }
 

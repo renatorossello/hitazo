@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { isHostAuthenticated } from "@/lib/spotify/auth";
 import { getGameByRoom, getCurrentRound, teamsInOrder, addCardToTimeline, advanceOrFinish } from "@/lib/game/server";
-import { resolveCard, hasWon } from "@/lib/game/rules";
+import { resolveCard } from "@/lib/game/rules";
 
 /**
  * POST /api/games/:roomCode/resolve  { metaAwarded }  (host/board)
@@ -38,9 +38,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
     outcome === "turn" ? round.team_id : outcome === "challenger" ? round.challenger_id : null;
 
   // La carta entra en la línea del ganador (renumerada por año).
-  let winnerCount = 0;
   if (cardWinnerId) {
-    winnerCount = await addCardToTimeline(supabase, cardWinnerId, round.card_id, round.card_year);
+    await addCardToTimeline(supabase, cardWinnerId, round.card_id, round.card_year);
   }
 
   // Ficha por título/artista: la decide el host (escuchó al equipo decirlo en voz alta).
@@ -58,12 +57,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
     .update({ card_winner_id: cardWinnerId, meta_awarded: awarded, phase: "resolved" })
     .eq("id", round.id);
 
-  // ¿Ganó alguien? (solo el ganador de la carta sumó). Si no, siguiente turno.
-  if (cardWinnerId && hasWon(winnerCount, game.config.targetCards)) {
-    await supabase.from("ct_games").update({ status: "finished" }).eq("id", game.id);
-  } else {
-    await advanceOrFinish(supabase, game);
-  }
+  // Avance / fin (fin justo: solo al cierre de vuelta con un único líder ≥ target).
+  await advanceOrFinish(supabase, game);
 
   return NextResponse.json({ ok: true });
 }

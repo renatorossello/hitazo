@@ -124,11 +124,40 @@ export async function addCardToTimeline(
   return rows.length;
 }
 
-/** Avanza al siguiente turno (nueva carta) o termina la partida si se agotó el mazo. */
+export async function getTeamCardCount(supabase: SupabaseClient, teamId: string): Promise<number> {
+  const { count } = await supabase
+    .from("ct_team_cards")
+    .select("id", { count: "exact", head: true })
+    .eq("team_id", teamId);
+  return count ?? 0;
+}
+
+/**
+ * Avanza al siguiente turno o termina la partida.
+ *
+ * Fin "justo": todos los equipos juegan la MISMA cantidad de turnos. La partida solo
+ * puede terminar al cierre de una vuelta completa (cuando jugó el último del orden).
+ * En ese cierre, si algún equipo llegó a targetCards y hay un ÚNICO líder en cartas,
+ * gana. Si hay empate arriba, se sigue otra vuelta hasta que uno quede solo adelante.
+ * También termina si se agota el mazo (gana el de más cartas, lo resuelve el estado).
+ */
 export async function advanceOrFinish(supabase: SupabaseClient, game: GameRow): Promise<void> {
   const teams = await teamsInOrder(supabase, game.id);
+  const n = teams.length;
+  const lapComplete = (game.current_turn + 1) % n === 0;
+
+  if (lapComplete) {
+    const counts = await Promise.all(teams.map((t) => getTeamCardCount(supabase, t.id)));
+    const max = Math.max(...counts);
+    const leaders = counts.filter((c) => c === max).length;
+    if (max >= game.config.targetCards && leaders === 1) {
+      await supabase.from("ct_games").update({ status: "finished" }).eq("id", game.id);
+      return;
+    }
+  }
+
   const nextTurn = game.current_turn + 1;
-  const nextTeam = teams[nextTurn % teams.length];
+  const nextTeam = teams[nextTurn % n];
 
   const [card] = await pickUnusedCards(supabase, game.id, game.filter_ids, 1);
   if (!card) {

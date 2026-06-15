@@ -106,6 +106,9 @@ export function useSpotifyPlayer() {
   const play = useCallback(
     async (uri: string) => {
       if (!deviceId) return;
+      // Desbloquea el elemento de audio (necesario para que el PRIMER play arranque
+      // sin tener que tocar Play; los navegadores exigen un gesto del usuario).
+      await playerRef.current?.activateElement?.();
       const token = await fetchAccessToken();
       if (!token) return;
       const res = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { QRCodeSVG } from "qrcode.react";
 import { useSpotifyPlayer } from "@/lib/spotify/useSpotifyPlayer";
 import Timelines from "./Timelines";
 import Logo from "./Logo";
@@ -31,12 +33,19 @@ export default function GameBoard({
   const firedRef = useRef("");
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [metaGuessed, setMetaGuessed] = useState(false);
+  const [origin, setOrigin] = useState("");
+  const router = useRouter();
 
   // Mantener los refs al día sin escribirlos durante el render.
   useEffect(() => {
     actRef.current = act;
     cfgRef.current = state.config;
   });
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- origin es client-only
+    setOrigin(window.location.origin);
+  }, []);
 
   const roundId = round?.id;
   const phase = round?.phase;
@@ -107,6 +116,17 @@ export default function GameBoard({
     setMetaGuessed(false);
   }
 
+  async function newGame() {
+    const res = await fetch("/api/games/create", { method: "POST" });
+    if (res.ok) {
+      const { roomCode } = (await res.json()) as { roomCode: string };
+      router.push(`/board/${roomCode}`);
+    }
+  }
+
+  const viewUrl = origin ? `${origin}/view/${state.roomCode}` : "";
+  const joinUrl = origin ? `${origin}/join?code=${state.roomCode}` : "";
+
   return (
     <main className="flex min-h-full flex-1 flex-col gap-5 bg-gradient-to-b from-brand-deep to-brand-dark p-6 text-white sm:p-8">
       <header className="flex items-center justify-between">
@@ -114,25 +134,56 @@ export default function GameBoard({
           <Logo className="text-2xl" />
           <span className="font-mono text-lg tracking-widest text-violet-200">{state.roomCode}</span>
         </div>
-        <span className="flex items-center gap-4 text-sm text-violet-300">
-          <a href={`/view/${state.roomCode}`} target="_blank" rel="noreferrer" className="underline">
-            📺 vista pública
-          </a>
-          <span>
-            Turno {state.currentTurn + 1} · {round?.phase ?? "—"}
-            {secondsLeft != null && secondsLeft >= 0 && (
-              <span className="ml-1 font-bold text-accent">⏱ {secondsLeft}s</span>
-            )}
-          </span>
+        <span className="text-sm text-violet-300">
+          Turno {state.currentTurn + 1} · {round?.phase ?? "—"}
+          {secondsLeft != null && secondsLeft >= 0 && (
+            <span className="ml-1 font-bold text-accent">⏱ {secondsLeft}s</span>
+          )}
         </span>
       </header>
 
+      {/* QR siempre visibles: vista pública + reingreso de equipos (por si se cae la app). */}
+      {origin && (
+        <div className="flex justify-center gap-6">
+          <div className="flex flex-col items-center gap-1">
+            <div className="rounded-lg bg-white p-1.5">
+              <QRCodeSVG value={viewUrl} size={84} />
+            </div>
+            <span className="text-[11px] text-violet-200">📺 Vista pública</span>
+          </div>
+          <div className="flex flex-col items-center gap-1">
+            <div className="rounded-lg bg-white p-1.5">
+              <QRCodeSVG value={joinUrl} size={84} />
+            </div>
+            <span className="text-[11px] text-violet-200">📲 Unirse / volver</span>
+          </div>
+        </div>
+      )}
+
       {state.status === "finished" && (
-        <div className="rounded-2xl bg-teal px-6 py-6 text-center text-white shadow-lg">
-          <p className="text-xs uppercase tracking-widest text-white/70">Fin de la partida</p>
-          <p className="text-4xl font-extrabold">
-            🏆 {state.teams.find((t) => t.id === state.winnerTeamId)?.name ?? "—"}
-          </p>
+        <div className="flex flex-col items-center gap-4 rounded-2xl bg-teal px-6 py-6 text-center text-white shadow-lg">
+          <div>
+            <p className="text-xs uppercase tracking-widest text-white/70">Fin de la partida</p>
+            <p className="text-4xl font-extrabold">
+              🏆 {state.teams.find((t) => t.id === state.winnerTeamId)?.name ?? "—"}
+            </p>
+          </div>
+          {isHost && (
+            <div className="flex flex-wrap justify-center gap-3">
+              <button
+                onClick={() => act("rematch")}
+                className="rounded-full bg-white px-6 py-2.5 font-bold text-teal transition active:scale-95"
+              >
+                🔁 Revancha (mismos equipos)
+              </button>
+              <button
+                onClick={newGame}
+                className="rounded-full border-2 border-white px-6 py-2.5 font-bold text-white transition hover:bg-white/10 active:scale-95"
+              >
+                ➕ Nueva partida (nuevos equipos)
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -184,6 +235,15 @@ export default function GameBoard({
                   className="rounded-full bg-accent px-5 py-2.5 text-sm font-bold text-brand-deep"
                 >
                   Revelar ahora
+                </button>
+              )}
+              {round?.phase === "playing" && (
+                <button
+                  onClick={() => act("skip")}
+                  className="rounded-full border border-white/30 px-5 py-2.5 text-sm font-semibold hover:bg-white/10"
+                  title="Cambiar el tema sin cambiar el turno (ej: ya salió antes)"
+                >
+                  ⏭ Saltear tema
                 </button>
               )}
             </div>

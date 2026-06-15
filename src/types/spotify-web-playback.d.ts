@@ -33,6 +33,7 @@ interface SpotifyPlayer {
   addListener(event: "player_state_changed", cb: (state: SpotifyPlayerState | null) => void): void;
   removeListener(event: string): void;
   getCurrentState(): Promise<SpotifyPlayerState | null>;
+  activateElement(): Promise<void>;
   pause(): Promise<void>;
   resume(): Promise<void>;
   seek(positionMs: number): Promise<void>;

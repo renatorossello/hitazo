@@ -333,3 +333,76 @@ Tres opciones según cuánto quieras invertir; recomendada la **A** para el MVP:
 - Título/artista: **votación manual** de los equipos sin turno; ficha si hubo ≥1 voto y Sí ≥ No. Sin votos → sin ficha.
 - Desafío: **uno solo**, el primero que reclama.
 - Timer de turno: **configurable**, vencimiento = turno perdido.
+
+---
+
+## 11. Modelo de hosts y límites de Spotify (operación)
+
+> Cómo se opera el juego en la práctica. El nombre definitivo es **Hitazo**; se publica
+> en **hitazo.rossello.com.ar** (Railway + Cloudflare).
+
+- **Jugadores**: ilimitados y self-service. Entran solo con el código/QR, **no se loguean
+  en Spotify**. No hay que agregarlos a ningún lado.
+- **Host**: el único que se loguea (cuenta **Premium**). Pone la música.
+- **Development Mode (Spotify)**: la app (1 Client ID) permite hasta **~5 usuarios Spotify
+  autorizados**. Cada host que no sea el dueño tiene que **agregarse a mano** en el
+  dashboard de Spotify → la app → **User Management** (nombre + email de su cuenta Spotify).
+  El dueño está habilitado automáticamente. Se agrega una vez por persona.
+- **Partidas en paralelo**: **sí se puede**. Cada grupo con su host, en su propio
+  dispositivo/navegador, con su propia cuenta Premium. La sesión del host vive en cookies
+  httpOnly del navegador (no hay "host global"), y cada partida tiene su propio `room_code`
+  y canal de Realtime → no se cruzan. **No compartir una misma cuenta Spotify entre dos
+  hosts simultáneos** (una cuenta Premium reproduce en un solo dispositivo a la vez).
+- **Abrir al público sin agregar hosts** → requiere **Extended Quota Mode**, que Spotify
+  (desde may-2025) solo da a **organizaciones** con servicio lanzado, **≥250.000 usuarios
+  activos mensuales**, presencia en mercados grandes y review de hasta 6 semanas. **No es
+  alcanzable** para un juego privado. → El **modelo privado** (host conocido + jugadores
+  ilimitados) es el techo práctico, y es suficiente para el caso de uso.
+
+---
+
+## 12. Cambios implementados respecto al diseño original (changelog)
+
+> Lo que se construyó diverge del PRD en varios puntos por decisiones del dueño durante el
+> desarrollo. **Manda esto**, el resto del PRD es referencia histórica.
+
+**Reglas / mecánica**
+- **Desafío sobre la línea del equipo EN TURNO** (no la propia): el desafiante ve la línea
+  del turno con el hueco que marcó, elige **otro** hueco de ESA línea (no el mismo). Si el
+  turno falló y el desafiante acierta, se lleva la carta a **su** línea. (Reemplaza la regla
+  de la sección 5 / decisión "desafiante ubica en su propia línea".)
+- **La ficha de título/artista la decide el HOST** en el reveal (checkbox "adivinó título y
+  artista"). Se **quitó** el toggle "arriesgo" del turno y la **votación Sí/No** de los
+  jugadores. La tabla `ct_round_votes` quedó sin uso.
+- **Empates de año**: cualquier hueco adyacente al bloque de años iguales es válido.
+- **Timer de turno**: `null` por defecto (sin límite). La ventana de desafío sí (15s).
+- **Cartas para ganar**: configurable en el lobby (5/7/10/12/15).
+- **Fin "justo"**: la partida solo puede terminar al **cierre de una vuelta completa** (todos
+  los equipos juegan la misma cantidad de turnos). En ese cierre, si hay un **único líder**
+  con ≥ target, gana. Si hay empate arriba, se sigue otra vuelta hasta que uno quede solo
+  adelante.
+- **Saltear tema** (host): cambia el tema del turno sin cambiar el turno, solo si todavía no
+  lo ubicaron. El salteado no reaparece en esa partida (`ct_games.skipped_card_ids`).
+- **Revancha / Nueva partida** desde el board al terminar (revancha = mismos equipos, vuelve
+  al lobby; nueva = crea otra sala).
+
+**UI / operación**
+- **Mobile-first** con identidad de marca (paleta del ícono). Player: **una línea de tiempo
+  por vez, vertical, con pestañas por equipo** (la pestaña sigue al turno; se puede cambiar);
+  los huecos se marcan en esa misma línea. Carátulas en las cartas.
+- **Board** (host) con tema oscuro para proyectar, y **dos QR siempre visibles**: vista
+  pública y reingreso de equipos (por si se les cae la app).
+- **`/view/:roomCode`**: vista pública de solo lectura con el **mismo formato** que el player
+  (pestañas + línea vertical).
+- Fix del **primer "Reproducir"** con `activateElement()` del Web Playback SDK.
+
+**Datos / mazos**
+- **Seed de 50 famosas** con **años curados** (`year_status = manual`), porque MusicBrainz por
+  ISRC volvía vacío con los remasters que devuelve Spotify. El flujo MB sigue para imports.
+- Migraciones: `0001` base · `0002` estado de ronda (+ votos, sin uso) · `0003` `played` ·
+  `0004` `skipped_card_ids`.
+
+**Arquitectura**
+- Estado autoritativo en Postgres (`src/lib/game/state.ts` + `server.ts`); Realtime solo avisa
+  `state_changed` y cada cliente re-lee `/api/games/:roomCode/state`. El host/board es la
+  autoridad (reveal/resolve/timeout/play/skip/rematch son host-only).
