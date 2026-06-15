@@ -11,6 +11,8 @@ import { NextRequest, NextResponse } from "next/server";
  * genera un loop de redirects → ERR_TOO_MANY_REDIRECTS).
  */
 export function proxy(req: NextRequest) {
+  // Solo en dev: en prod (detrás del proxy de Railway) NO reescribimos el host.
+  if (process.env.NODE_ENV !== "development") return NextResponse.next();
   const host = req.headers.get("host") ?? "";
   if (host.startsWith("localhost")) {
     const url = new URL(req.url);

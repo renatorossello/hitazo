@@ -51,6 +51,25 @@ function redirectUri(): string {
   return uri;
 }
 
+/**
+ * Origen público de la app. Detrás de un proxy (Railway) el `req.url` puede ser el
+ * interno (localhost:PORT), así que para los redirects internos usamos esto: APP_URL
+ * si está, o el origin del SPOTIFY_REDIRECT_URI (que siempre es la URL pública).
+ */
+export function appOrigin(): string | null {
+  const explicit = process.env.APP_URL;
+  if (explicit) return explicit.replace(/\/+$/, "");
+  const uri = process.env.SPOTIFY_REDIRECT_URI;
+  if (uri) {
+    try {
+      return new URL(uri).origin;
+    } catch {
+      /* ignore */
+    }
+  }
+  return null;
+}
+
 const secureCookie = process.env.NODE_ENV === "production";
 
 function cookieOpts(maxAgeSec: number) {

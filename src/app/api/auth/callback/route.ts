@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { exchangeCodeForTokens, readPkceFromRequest, clearPkceCookies } from "@/lib/spotify/auth";
+import { exchangeCodeForTokens, readPkceFromRequest, clearPkceCookies, appOrigin } from "@/lib/spotify/auth";
 
 /**
  * GET /api/auth/callback?code=...&state=...
@@ -8,7 +8,9 @@ import { exchangeCodeForTokens, readPkceFromRequest, clearPkceCookies } from "@/
  */
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
-  const origin = url.origin;
+  // Detrás del proxy de Railway, url.origin puede ser interno (localhost:PORT). Para
+  // los redirects internos usamos el origin público.
+  const origin = appOrigin() ?? url.origin;
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
   const error = url.searchParams.get("error");
