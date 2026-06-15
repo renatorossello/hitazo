@@ -25,7 +25,8 @@ export async function getPlayableCards(
       .from("ct_card_filters")
       .select("card_id")
       .in("filter_id", filterIds);
-    restrictIds = (links ?? []).map((l) => l.card_id);
+    // Dedup: una carta en varias playlists elegidas entra UNA sola vez al mazo.
+    restrictIds = [...new Set((links ?? []).map((l) => l.card_id))];
     if (restrictIds.length === 0) return [];
   }
 

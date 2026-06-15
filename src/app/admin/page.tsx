@@ -295,7 +295,14 @@ export default function AdminPage() {
           <button onClick={resolveAll} disabled={busy !== null} className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
             {busy === "resolve" ? "Resolviendo…" : "Resolver pendientes"}
           </button>
-          <button onClick={refreshProgress} disabled={busy !== null} className="rounded-full border px-4 py-2 text-sm font-semibold disabled:opacity-50">
+          <button
+            onClick={async () => {
+              await Promise.all([refreshProgress(), loadDecks()]);
+              setMsg("Progreso actualizado.");
+            }}
+            disabled={busy !== null}
+            className="rounded-full border px-4 py-2 text-sm font-semibold disabled:opacity-50"
+          >
             Actualizar progreso
           </button>
         </div>

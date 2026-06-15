@@ -338,6 +338,8 @@ export async function importTracks(
 ): Promise<{ imported: number }> {
   if (tracks.length === 0) return { imported: 0 };
 
+  // OJO: NO incluir year_status. En cartas nuevas cae al default ('pending'); en
+  // cartas que ya existían, NO lo pisamos (mantiene 'resolved'/'manual' y su año).
   const rows = tracks.map((t) => ({
     spotify_uri: t.spotify_uri,
     spotify_id: t.spotify_id,
@@ -349,7 +351,6 @@ export async function importTracks(
     genres: t.genres ?? null,
     genre_buckets: t.genreBuckets ?? null,
     region: t.region ?? null,
-    year_status: "pending" as const,
   }));
 
   const { data, error } = await supabase
