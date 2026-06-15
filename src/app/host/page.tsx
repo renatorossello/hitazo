@@ -12,9 +12,9 @@ const ERRORS: Record<string, string> = {
 export default async function HostPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; detail?: string }>;
 }) {
-  const { error } = await searchParams;
+  const { error, detail } = await searchParams;
   const connected = await isHostAuthenticated();
 
   return (
@@ -30,9 +30,10 @@ export default async function HostPage({
       </p>
 
       {error && (
-        <p className="max-w-sm rounded-xl bg-red-500/20 px-4 py-2 text-sm text-red-200">
-          {ERRORS[error] ?? `Error: ${error}`}
-        </p>
+        <div className="max-w-sm rounded-xl bg-red-500/20 px-4 py-2 text-sm text-red-200">
+          <p>{ERRORS[error] ?? `Error: ${error}`}</p>
+          {detail && <p className="mt-1 break-words font-mono text-[11px] text-red-300/80">{detail}</p>}
+        </div>
       )}
 
       {connected ? (

@@ -30,8 +30,10 @@ export async function GET(req: NextRequest) {
     await exchangeCodeForTokens(res, code, verifier);
     clearPkceCookies(res);
     return res;
-  } catch {
-    const res = NextResponse.redirect(new URL("/host?error=token_exchange", origin));
+  } catch (e) {
+    console.error("[auth/callback] token exchange failed:", e);
+    const detail = encodeURIComponent(String(e).slice(0, 200));
+    const res = NextResponse.redirect(new URL(`/host?error=token_exchange&detail=${detail}`, origin));
     clearPkceCookies(res);
     return res;
   }
