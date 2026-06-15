@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Logo from "@/components/Logo";
 import { playerStorageKey } from "@/lib/game/player";
 
 export default function JoinPage() {
@@ -11,8 +12,6 @@ export default function JoinPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Prefill del código si vino del QR (?code=...). Leemos de la URL en el cliente
-  // para no forzar un Suspense boundary con useSearchParams.
   useEffect(() => {
     const fromUrl = new URLSearchParams(window.location.search).get("code");
     // eslint-disable-next-line react-hooks/set-state-in-effect -- prefill client-only (?code del QR)
@@ -29,7 +28,7 @@ export default function JoinPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ roomCode: code, teamName }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         const msgs: Record<string, string> = {
           game_not_found: "No existe una sala con ese código.",
@@ -40,7 +39,6 @@ export default function JoinPage() {
         setError(msgs[data.error] ?? "No se pudo unir. Probá de nuevo.");
         return;
       }
-      // Identidad del player en el celular (sin login).
       localStorage.setItem(
         playerStorageKey(data.roomCode),
         JSON.stringify({ teamId: data.teamId, name: data.teamName, joinOrder: data.joinOrder })
@@ -54,35 +52,37 @@ export default function JoinPage() {
   }
 
   return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-6 p-8">
-      <h1 className="text-3xl font-bold">Unirse a Hitazo</h1>
-      <form onSubmit={join} className="flex w-full max-w-xs flex-col gap-4">
-        <label className="flex flex-col gap-1 text-sm">
+    <main className="flex flex-1 flex-col items-center justify-center gap-8 bg-gradient-to-b from-brand-deep via-brand-dark to-brand px-6 py-12 text-white">
+      <Logo className="text-5xl" />
+
+      <form onSubmit={join} className="flex w-full max-w-xs flex-col gap-5">
+        <label className="flex flex-col gap-1.5 text-sm font-medium text-violet-200">
           Código de sala
           <input
             value={code}
             onChange={(e) => setCode(e.target.value.toUpperCase())}
             maxLength={6}
             autoCapitalize="characters"
-            className="rounded-md border px-3 py-2 text-center font-mono text-2xl tracking-[0.3em]"
+            inputMode="text"
+            className="rounded-2xl border-2 border-white/20 bg-white/10 px-4 py-4 text-center font-mono text-4xl font-bold tracking-[0.3em] text-white placeholder-white/30 outline-none focus:border-accent"
             placeholder="ABC123"
           />
         </label>
-        <label className="flex flex-col gap-1 text-sm">
+        <label className="flex flex-col gap-1.5 text-sm font-medium text-violet-200">
           Nombre del equipo
           <input
             value={teamName}
             onChange={(e) => setTeamName(e.target.value)}
             maxLength={40}
-            className="rounded-md border px-3 py-2"
+            className="rounded-2xl border-2 border-white/20 bg-white/10 px-4 py-4 text-lg text-white placeholder-white/30 outline-none focus:border-accent"
             placeholder="Los Pibes"
           />
         </label>
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="rounded-xl bg-red-500/20 px-3 py-2 text-sm text-red-200">{error}</p>}
         <button
           type="submit"
           disabled={loading || !code || !teamName}
-          className="rounded-full bg-black px-6 py-3 font-semibold text-white hover:bg-gray-800 disabled:opacity-50"
+          className="rounded-2xl bg-accent px-6 py-4 text-lg font-bold text-brand-deep shadow-lg transition hover:brightness-105 active:scale-[0.98] disabled:opacity-40"
         >
           {loading ? "Entrando…" : "Entrar"}
         </button>

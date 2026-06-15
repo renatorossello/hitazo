@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSpotifyPlayer } from "@/lib/spotify/useSpotifyPlayer";
 import Timelines from "./Timelines";
+import Logo from "./Logo";
 import type { GameState } from "@/lib/game/state";
 
 /**
@@ -107,36 +108,41 @@ export default function GameBoard({
   }
 
   return (
-    <main className="flex flex-1 flex-col gap-6 p-8">
+    <main className="flex min-h-full flex-1 flex-col gap-5 bg-gradient-to-b from-brand-deep to-brand-dark p-6 text-white sm:p-8">
       <header className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-gray-500">
-          Hitazo · sala <span className="font-mono">{state.roomCode}</span>
-        </h1>
-        <span className="flex items-center gap-3 text-sm text-gray-400">
+        <div className="flex items-baseline gap-3">
+          <Logo className="text-2xl" />
+          <span className="font-mono text-lg tracking-widest text-violet-200">{state.roomCode}</span>
+        </div>
+        <span className="flex items-center gap-4 text-sm text-violet-300">
           <a href={`/view/${state.roomCode}`} target="_blank" rel="noreferrer" className="underline">
             📺 vista pública
           </a>
-          Turno {state.currentTurn + 1} · {round?.phase ?? "—"}
-          {secondsLeft != null && secondsLeft >= 0 && ` · ⏱ ${secondsLeft}s`}
+          <span>
+            Turno {state.currentTurn + 1} · {round?.phase ?? "—"}
+            {secondsLeft != null && secondsLeft >= 0 && (
+              <span className="ml-1 font-bold text-accent">⏱ {secondsLeft}s</span>
+            )}
+          </span>
         </span>
       </header>
 
       {state.status === "finished" && (
-        <div className="rounded-lg bg-green-600 px-6 py-5 text-center text-white">
-          <p className="text-xs uppercase tracking-widest text-green-200">Fin de la partida</p>
-          <p className="text-3xl font-bold">
+        <div className="rounded-2xl bg-teal px-6 py-6 text-center text-white shadow-lg">
+          <p className="text-xs uppercase tracking-widest text-white/70">Fin de la partida</p>
+          <p className="text-4xl font-extrabold">
             🏆 {state.teams.find((t) => t.id === state.winnerTeamId)?.name ?? "—"}
           </p>
         </div>
       )}
 
       {state.status === "playing" && turnTeam && (
-        <div className="rounded-lg bg-black px-6 py-4 text-center text-white">
-          <p className="text-xs uppercase tracking-widest text-gray-400">Turno de</p>
-          <p className="text-2xl font-bold">{turnTeam.name}</p>
+        <div className="rounded-2xl bg-brand px-6 py-5 text-center shadow-lg ring-1 ring-white/10">
+          <p className="text-xs uppercase tracking-widest text-violet-200">Turno de</p>
+          <p className="text-3xl font-extrabold">{turnTeam.name}</p>
           {round?.phase === "challenge" && (
-            <p className="mt-1 text-xs text-amber-300">
-              {challengerTeam ? `Desafía ${challengerTeam.name}` : "Ventana de desafío abierta"}
+            <p className="mt-1 text-sm font-semibold text-accent">
+              {challengerTeam ? `⚡ Desafía ${challengerTeam.name}` : "Ventana de desafío abierta…"}
             </p>
           )}
         </div>
@@ -144,66 +150,72 @@ export default function GameBoard({
 
       {/* Controles de reproducción (host) */}
       {isHost && (
-        <div className="flex flex-col items-center gap-2 rounded-lg border p-4">
-          {player.status !== "ready" && <p className="text-sm text-gray-500">{player.message}</p>}
+        <div className="flex flex-col items-center gap-3 rounded-2xl bg-white/5 p-4 ring-1 ring-white/10">
+          {player.status !== "ready" && <p className="text-sm text-violet-200">{player.message}</p>}
           {player.status === "no_session" && (
-            <a href="/host" className="rounded-full bg-black px-5 py-2 text-sm font-semibold text-white">
+            <a href="/host" className="rounded-full bg-accent px-5 py-2 text-sm font-bold text-brand-deep">
               Reconectar host
             </a>
           )}
           {player.status === "ready" && (
-            <div className="flex gap-3">
+            <div className="flex flex-wrap items-center justify-center gap-3">
               <button
                 onClick={playCard}
                 disabled={!round?.cardUri}
-                className="rounded-full bg-[#1DB954] px-5 py-2 font-semibold text-white disabled:opacity-50"
+                className="rounded-full bg-[#1DB954] px-6 py-2.5 font-bold text-white transition active:scale-95 disabled:opacity-50"
               >
-                Reproducir carta
+                ▶ Reproducir carta
               </button>
-              <button onClick={player.togglePlay} className="rounded-full border px-5 py-2 font-semibold">
+              <button
+                onClick={player.togglePlay}
+                className="rounded-full border border-white/30 px-5 py-2.5 font-semibold hover:bg-white/10"
+              >
                 {player.isPaused ? "Play" : "Pausa"}
               </button>
-              <button onClick={player.replay} className="rounded-full border px-5 py-2 font-semibold">
+              <button
+                onClick={player.replay}
+                className="rounded-full border border-white/30 px-5 py-2.5 font-semibold hover:bg-white/10"
+              >
                 Replay
               </button>
+              {round?.phase === "challenge" && (
+                <button
+                  onClick={() => act("reveal")}
+                  className="rounded-full bg-accent px-5 py-2.5 text-sm font-bold text-brand-deep"
+                >
+                  Revelar ahora
+                </button>
+              )}
             </div>
-          )}
-          {round?.phase === "challenge" && (
-            <button
-              onClick={() => act("reveal")}
-              className="rounded-full bg-black px-5 py-2 text-sm font-semibold text-white"
-            >
-              Revelar ahora
-            </button>
           )}
         </div>
       )}
 
       {/* Reveal */}
       {round?.phase === "reveal" && round.reveal && (
-        <div className="flex flex-col items-center gap-3 rounded-lg border-2 border-black p-6">
-          <p className="text-xs uppercase tracking-widest text-gray-400">Reveal</p>
+        <div className="flex flex-col items-center gap-3 rounded-2xl bg-white/10 p-6 ring-2 ring-accent">
+          <p className="text-xs uppercase tracking-widest text-violet-200">Reveal</p>
           <div className="flex items-center gap-4">
             {round.reveal.coverUrl && (
               // eslint-disable-next-line @next/next/no-img-element -- carátula del CDN de Spotify
-              <img src={round.reveal.coverUrl} alt="" className="h-20 w-20 rounded" />
+              <img src={round.reveal.coverUrl} alt="" className="h-24 w-24 rounded-xl shadow-lg" />
             )}
             <div className="text-left">
-              <p className="font-mono text-4xl font-bold">{round.reveal.year}</p>
-              <p className="font-semibold">{round.reveal.title}</p>
-              <p className="text-sm text-gray-500">{round.reveal.artist}</p>
+              <p className="font-mono text-5xl font-extrabold text-accent">{round.reveal.year}</p>
+              <p className="text-lg font-bold">{round.reveal.title}</p>
+              <p className="text-sm text-violet-200">{round.reveal.artist}</p>
             </div>
           </div>
           <p className="text-sm">
             {turnTeam?.name}: ubicó{" "}
-            <span className={round.placedCorrect ? "text-green-600" : "text-red-600"}>
+            <span className={round.placedCorrect ? "font-bold text-teal" : "font-bold text-red-400"}>
               {round.placedCorrect ? "bien ✓" : "mal ✗"}
             </span>
             {challengerTeam && (
               <>
                 {" · "}
                 {challengerTeam.name} (desafío):{" "}
-                <span className={round.challengeCorrect ? "text-green-600" : "text-red-600"}>
+                <span className={round.challengeCorrect ? "font-bold text-teal" : "font-bold text-red-400"}>
                   {round.challengeCorrect ? "bien ✓" : "mal ✗"}
                 </span>
               </>
@@ -211,17 +223,18 @@ export default function GameBoard({
           </p>
           {isHost && (
             <div className="flex flex-col items-center gap-3">
-              <label className="flex items-center gap-2 rounded-md bg-gray-100 px-3 py-2 text-sm">
+              <label className="flex cursor-pointer items-center gap-2 rounded-xl bg-white/10 px-4 py-2.5 text-sm">
                 <input
                   type="checkbox"
                   checked={metaGuessed}
                   onChange={(e) => setMetaGuessed(e.target.checked)}
+                  className="h-4 w-4"
                 />
                 {turnTeam?.name} adivinó <strong>título y artista</strong> (+🪙)
               </label>
               <button
                 onClick={resolveRound}
-                className="rounded-full bg-black px-8 py-3 font-semibold text-white"
+                className="rounded-full bg-accent px-10 py-3 text-lg font-bold text-brand-deep transition active:scale-95"
               >
                 Continuar →
               </button>
@@ -231,7 +244,7 @@ export default function GameBoard({
       )}
 
       {/* Líneas de tiempo (todas) */}
-      <Timelines state={state} />
+      <Timelines state={state} variant="dark" />
     </main>
   );
 }

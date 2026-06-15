@@ -1,26 +1,38 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* Paleta de marca Hitazo (del ícono): violeta primario, amarillo/naranja de acento,
+   magenta y teal de apoyo. */
+@theme {
+  --color-brand: #6d28d9; /* violeta primario */
+  --color-brand-600: #7c3aed;
+  --color-brand-500: #8b5cf6;
+  --color-brand-dark: #2a1259; /* fondo del board (proyección) */
+  --color-brand-deep: #190a36;
+  --color-accent: #f9a826; /* amarillo/naranja */
+  --color-accent-600: #ea8c12;
+  --color-magenta: #e0408a;
+  --color-teal: #14b8a6;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  --background: #ffffff;
+  --foreground: #1a1430;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* Oculta scrollbars horizontales en las líneas de tiempo (mobile). */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }

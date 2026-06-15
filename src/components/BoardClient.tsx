@@ -112,7 +112,9 @@ export default function BoardClient({ roomCode, isHost }: { roomCode: string; is
 
   if (!state) {
     return (
-      <main className="flex flex-1 items-center justify-center p-8 text-sm text-gray-400">Cargando…</main>
+      <main className="flex min-h-full flex-1 items-center justify-center bg-gradient-to-b from-brand-deep to-brand-dark p-8 text-sm text-violet-300">
+        Cargando…
+      </main>
     );
   }
 
