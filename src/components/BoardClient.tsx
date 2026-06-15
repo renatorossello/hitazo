@@ -7,6 +7,7 @@ import { gameChannel, GameEvent, type TeamPresence } from "@/lib/game/events";
 import type { GameState } from "@/lib/game/state";
 import Lobby, { type LobbyTeam } from "./Lobby";
 import GameBoard from "./GameBoard";
+import { useWakeLock } from "./useWakeLock";
 
 /**
  * Orquestador del board: única suscripción al canal game:{roomCode} (presencia +
@@ -27,6 +28,19 @@ export default function BoardClient({ roomCode, isHost }: { roomCode: string; is
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch inicial async (setState post-await)
     refetch();
+  }, [refetch]);
+
+  useWakeLock();
+  useEffect(() => {
+    const onResume = () => {
+      if (document.visibilityState === "visible") refetch();
+    };
+    document.addEventListener("visibilitychange", onResume);
+    window.addEventListener("focus", onResume);
+    return () => {
+      document.removeEventListener("visibilitychange", onResume);
+      window.removeEventListener("focus", onResume);
+    };
   }, [refetch]);
 
   useEffect(() => {

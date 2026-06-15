@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { isHostAuthenticated } from "@/lib/spotify/auth";
-import { getGameByRoom, getCurrentRound, teamsInOrder, addCardToTimeline, advanceOrFinish } from "@/lib/game/server";
+import { getGameByRoom, getCurrentRound, teamsInOrder, addCardToTimeline } from "@/lib/game/server";
 import { resolveCard } from "@/lib/game/rules";
 
 /**
@@ -57,8 +57,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
     .update({ card_winner_id: cardWinnerId, meta_awarded: awarded, phase: "resolved" })
     .eq("id", round.id);
 
-  // Avance / fin (fin justo: solo al cierre de vuelta con un único líder ≥ target).
-  await advanceOrFinish(supabase, game);
-
+  // No avanzamos acá: el host arranca la próxima ronda con "Iniciar ronda"
+  // (POST /next-round) → da tiempo a una pausa entre rondas.
   return NextResponse.json({ ok: true });
 }

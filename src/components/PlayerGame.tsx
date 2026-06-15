@@ -121,8 +121,9 @@ export default function PlayerGame({
     } else {
       banner = pill("Esperando que el turno cierre… ⏳", "wait");
     }
-  } else if (round.phase === "reveal") {
+  } else if (round.phase === "reveal" || round.phase === "resolved") {
     const r = round.reveal;
+    const winnerName = round.cardWinnerId ? teamName(round.cardWinnerId) : null;
     banner = (
       <div className="flex w-full flex-col items-center gap-2 rounded-2xl bg-white px-5 py-4 shadow-md">
         {r && (
@@ -148,7 +149,12 @@ export default function PlayerGame({
             {round.challengeCorrect ? "¡Acertaste el desafío! ✓" : "Fallaste el desafío ✗"}
           </p>
         )}
-        <p className="text-xs text-gray-400">Esperando al host…</p>
+        {round.phase === "resolved" && winnerName && (
+          <p className="text-sm font-semibold text-teal">🃏 La carta es para {winnerName}</p>
+        )}
+        <p className="text-xs text-gray-400">
+          {round.phase === "resolved" ? "Ronda resuelta. Esperando la próxima…" : "Esperando al host…"}
+        </p>
       </div>
     );
   }

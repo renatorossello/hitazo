@@ -10,6 +10,7 @@ import { loadPlayer, type StoredPlayer } from "@/lib/game/player";
 import type { GameState } from "@/lib/game/state";
 import Logo from "@/components/Logo";
 import PlayerGame from "@/components/PlayerGame";
+import { useWakeLock } from "@/components/useWakeLock";
 
 export default function PlayPage() {
   const params = useParams<{ roomCode: string }>();
@@ -30,6 +31,21 @@ export default function PlayPage() {
     const res = await fetch(`/api/games/${roomCode}/state`);
     if (res.ok) setState(await res.json());
   }, [roomCode]);
+
+  // Mantener la pantalla activa y re-sincronizar al volver de segundo plano (si el
+  // celu se durmió, el realtime pudo perder eventos → re-leemos el estado).
+  useWakeLock();
+  useEffect(() => {
+    const onResume = () => {
+      if (document.visibilityState === "visible") refetch();
+    };
+    document.addEventListener("visibilitychange", onResume);
+    window.addEventListener("focus", onResume);
+    return () => {
+      document.removeEventListener("visibilitychange", onResume);
+      window.removeEventListener("focus", onResume);
+    };
+  }, [refetch]);
 
   useEffect(() => {
     if (!player) return;

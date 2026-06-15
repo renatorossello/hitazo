@@ -234,8 +234,8 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* Reveal */}
-      {round?.phase === "reveal" && round.reveal && (
+      {/* Reveal / resolución */}
+      {(round?.phase === "reveal" || round?.phase === "resolved") && round.reveal && (
         <div className="flex flex-col items-center gap-3 rounded-2xl bg-white/10 p-6 ring-2 ring-accent">
           <p className="text-xs uppercase tracking-widest text-violet-200">Reveal</p>
           <div className="flex items-center gap-4">
@@ -264,7 +264,12 @@ export default function GameBoard({
               </>
             )}
           </p>
-          {isHost && (
+          {round.cardWinnerId && (
+            <p className="text-sm font-semibold text-teal">
+              🃏 La carta es para {state.teams.find((t) => t.id === round.cardWinnerId)?.name ?? "—"}
+            </p>
+          )}
+          {isHost && round.phase === "reveal" && (
             <div className="flex flex-col items-center gap-2">
               <p className="text-sm text-violet-200">
                 ¿{turnTeam?.name} adivinó <strong>título y artista</strong>?
@@ -284,6 +289,14 @@ export default function GameBoard({
                 </button>
               </div>
             </div>
+          )}
+          {isHost && round.phase === "resolved" && (
+            <button
+              onClick={() => act("next-round")}
+              className="rounded-full bg-accent px-10 py-3 text-lg font-bold text-brand-deep transition active:scale-95"
+            >
+              ▶ Iniciar ronda
+            </button>
           )}
         </div>
       )}

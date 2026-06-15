@@ -7,6 +7,7 @@ import type { GameState } from "@/lib/game/state";
 import type { VMarker } from "./VerticalTimeline";
 import TeamTimelineTabs, { useActiveTab } from "./TeamTimelineTabs";
 import Logo from "./Logo";
+import { useWakeLock } from "./useWakeLock";
 
 /**
  * Vista de solo lectura, con el MISMO formato que el player (pestañas + línea
@@ -31,6 +32,19 @@ export default function SpectatorView({ roomCode }: { roomCode: string }) {
       supabase.removeChannel(channel);
     };
   }, [roomCode, refetch]);
+
+  useWakeLock();
+  useEffect(() => {
+    const onResume = () => {
+      if (document.visibilityState === "visible") refetch();
+    };
+    document.addEventListener("visibilitychange", onResume);
+    window.addEventListener("focus", onResume);
+    return () => {
+      document.removeEventListener("visibilitychange", onResume);
+      window.removeEventListener("focus", onResume);
+    };
+  }, [refetch]);
 
   return (
     <main className="flex min-h-full flex-1 flex-col gap-4 bg-gradient-to-b from-brand-deep to-brand p-5 text-white sm:p-8">
