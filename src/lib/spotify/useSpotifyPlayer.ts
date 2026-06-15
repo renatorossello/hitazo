@@ -1,0 +1,133 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+
+/**
+ * Hook del Web Playback SDK para el board (host). Inicializa el player con el token
+ * del host y expone controles. `play(uri)` arranca un track por URI en este device.
+ */
+export type PlayerStatus = "loading" | "no_session" | "ready" | "error";
+
+export function useSpotifyPlayer() {
+  const [status, setStatus] = useState<PlayerStatus>("loading");
+  const [message, setMessage] = useState("Cargando el SDK de Spotify…");
+  const [deviceId, setDeviceId] = useState<string | null>(null);
+  const [isPaused, setIsPaused] = useState(true);
+  const playerRef = useRef<SpotifyPlayer | null>(null);
+
+  const fetchAccessToken = useCallback(async (): Promise<string | null> => {
+    try {
+      const res = await fetch("/api/spotify/token");
+      if (res.status === 401) {
+        setStatus("no_session");
+        setMessage("No hay sesión de Spotify. Conectate como host primero.");
+        return null;
+      }
+      if (!res.ok) {
+        setStatus("error");
+        setMessage(`Error pidiendo token (${res.status}).`);
+        return null;
+      }
+      const data = (await res.json()) as { access_token: string };
+      return data.access_token;
+    } catch (e) {
+      setStatus("error");
+      setMessage(`No se pudo pedir el token: ${String(e)}`);
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    function initPlayer() {
+      if (cancelled || !window.Spotify) return;
+      const player = new window.Spotify.Player({
+        name: "Hitazo Board",
+        volume: 0.8,
+        getOAuthToken: (cb) => {
+          fetchAccessToken().then((token) => {
+            if (token) cb(token);
+          });
+        },
+      });
+      playerRef.current = player;
+
+      player.addListener("ready", ({ device_id }) => {
+        if (cancelled) return;
+        setDeviceId(device_id);
+        setStatus("ready");
+        setMessage("");
+      });
+      player.addListener("not_ready", () => setMessage("El dispositivo quedó offline."));
+      player.addListener("authentication_error", ({ message }) => {
+        setStatus("no_session");
+        setMessage(`Error de autenticación: ${message}. Reconectá el host.`);
+      });
+      player.addListener("account_error", ({ message }) => {
+        setStatus("error");
+        setMessage(`Error de cuenta (¿no es Premium?): ${message}`);
+      });
+      player.addListener("initialization_error", ({ message }) => {
+        setStatus("error");
+        setMessage(`No se pudo inicializar el SDK: ${message}`);
+      });
+      player.addListener("player_state_changed", (state) => {
+        if (!state) return;
+        setIsPaused(state.paused);
+      });
+
+      player.connect();
+    }
+
+    if (window.Spotify) {
+      initPlayer();
+    } else {
+      window.onSpotifyWebPlaybackSDKReady = initPlayer;
+      if (!document.getElementById("spotify-sdk")) {
+        const script = document.createElement("script");
+        script.id = "spotify-sdk";
+        script.src = "https://sdk.scdn.co/spotify-player.js";
+        script.async = true;
+        script.onerror = () => {
+          setStatus("error");
+          setMessage("No se pudo cargar el SDK de Spotify (¿ad-blocker?). Desactivalo y recargá.");
+        };
+        document.body.appendChild(script);
+      }
+    }
+
+    return () => {
+      cancelled = true;
+      playerRef.current?.disconnect();
+    };
+  }, [fetchAccessToken]);
+
+  const play = useCallback(
+    async (uri: string) => {
+      if (!deviceId) return;
+      const token = await fetchAccessToken();
+      if (!token) return;
+      const res = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ uris: [uri] }),
+      });
+      if (!res.ok && res.status !== 204) {
+        setMessage(`No se pudo reproducir (${res.status}).`);
+      }
+    },
+    [deviceId, fetchAccessToken]
+  );
+
+  const togglePlay = useCallback(async () => {
+    await playerRef.current?.[isPaused ? "resume" : "pause"]();
+  }, [isPaused]);
+
+  const replay = useCallback(async () => {
+    await playerRef.current?.seek(0);
+    await playerRef.current?.resume();
+  }, []);
+
+  return { status, message, deviceId, isPaused, play, togglePlay, replay };
+}

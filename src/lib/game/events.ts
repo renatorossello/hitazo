@@ -18,6 +18,9 @@ export type TeamPresence = {
 // Eventos de broadcast (emisor → efecto). Se irá ampliando por fase.
 export const GameEvent = {
   TeamJoined: "team_joined",
+  // El estado de la partida cambió en Postgres: cada cliente re-lee /state.
+  // (DB = fuente de verdad; el broadcast solo avisa "cambió algo".)
+  StateChanged: "state_changed",
 } as const;
 
 export type TeamJoinedPayload = {

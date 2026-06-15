@@ -1,72 +1,34 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { getSupabaseBrowser } from "@/lib/supabase/client";
-import { gameChannel, type TeamPresence } from "@/lib/game/events";
 
-type LobbyTeam = { teamId: string; name: string; joinOrder: number };
+export type LobbyTeam = { teamId: string; name: string; joinOrder: number; connected: boolean };
 
+/**
+ * Vista de lobby (presentacional). La suscripción al canal y el merge de presencia
+ * los maneja BoardClient; acá solo mostramos código + QR + equipos + "Empezar".
+ */
 export default function Lobby({
   roomCode,
-  status,
+  teams,
   isHost,
-  initialTeams,
+  onStart,
+  starting,
+  startError,
 }: {
   roomCode: string;
-  status: string;
+  teams: LobbyTeam[];
   isHost: boolean;
-  initialTeams: LobbyTeam[];
+  onStart: () => void;
+  starting: boolean;
+  startError: string | null;
 }) {
   const [joinUrl, setJoinUrl] = useState<string | null>(null);
-  const [present, setPresent] = useState<Record<string, TeamPresence>>({});
-
-  // La URL del QR depende del origin (en prod hitazo.rossello.com.ar, en dev 127.0.0.1),
-  // que solo existe en el cliente: se setea tras el mount (evita mismatch de hidratación).
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- valor client-only (window.location)
     setJoinUrl(`${window.location.origin}/join?code=${roomCode}`);
   }, [roomCode]);
-
-  // Realtime: el board observa la presencia de los equipos conectados.
-  useEffect(() => {
-    const supabase = getSupabaseBrowser();
-    const channel = supabase.channel(gameChannel(roomCode), {
-      config: { presence: { key: "board" } },
-    });
-
-    channel
-      .on("presence", { event: "sync" }, () => {
-        const state = channel.presenceState<TeamPresence>();
-        const next: Record<string, TeamPresence> = {};
-        for (const entries of Object.values(state)) {
-          for (const e of entries) {
-            if (e.teamId) next[e.teamId] = e;
-          }
-        }
-        setPresent(next);
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [roomCode]);
-
-  // Unión: equipos persistidos (DB) + presencia viva. `connected` = está en presencia.
-  const teams = useMemo(() => {
-    const byId = new Map<string, LobbyTeam & { connected: boolean }>();
-    for (const t of initialTeams) byId.set(t.teamId, { ...t, connected: false });
-    for (const p of Object.values(present)) {
-      byId.set(p.teamId, {
-        teamId: p.teamId,
-        name: p.name,
-        joinOrder: p.joinOrder,
-        connected: true,
-      });
-    }
-    return [...byId.values()].sort((a, b) => a.joinOrder - b.joinOrder);
-  }, [initialTeams, present]);
 
   return (
     <main className="flex flex-1 flex-col items-center gap-8 p-8">
@@ -92,9 +54,7 @@ export default function Lobby({
       </div>
 
       <section className="w-full max-w-md">
-        <h2 className="mb-2 text-sm uppercase tracking-widest text-gray-400">
-          Equipos ({teams.length})
-        </h2>
+        <h2 className="mb-2 text-sm uppercase tracking-widest text-gray-400">Equipos ({teams.length})</h2>
         {teams.length === 0 ? (
           <p className="rounded-md bg-gray-50 px-4 py-6 text-center text-sm text-gray-400">
             Esperando equipos… escaneá el QR o entrá a /join con el código.
@@ -102,15 +62,9 @@ export default function Lobby({
         ) : (
           <ul className="flex flex-col gap-2">
             {teams.map((t) => (
-              <li
-                key={t.teamId}
-                className="flex items-center justify-between rounded-md border px-4 py-3"
-              >
+              <li key={t.teamId} className="flex items-center justify-between rounded-md border px-4 py-3">
                 <span className="font-semibold">{t.name}</span>
-                <span
-                  className={`text-xs ${t.connected ? "text-green-600" : "text-gray-400"}`}
-                  title={t.connected ? "Conectado" : "Desconectado"}
-                >
+                <span className={`text-xs ${t.connected ? "text-green-600" : "text-gray-400"}`}>
                   {t.connected ? "● conectado" : "○ ausente"}
                 </span>
               </li>
@@ -122,17 +76,14 @@ export default function Lobby({
       {isHost && (
         <div className="flex flex-col items-center gap-2">
           <button
-            disabled
-            className="cursor-not-allowed rounded-full bg-black px-8 py-3 font-semibold text-white opacity-40"
-            title="La lógica de juego llega en la Fase 3"
+            onClick={onStart}
+            disabled={starting || teams.length < 2}
+            className="rounded-full bg-black px-8 py-3 font-semibold text-white hover:bg-gray-800 disabled:opacity-40"
           >
-            Empezar partida
+            {starting ? "Empezando…" : "Empezar partida"}
           </button>
-          <p className="text-xs text-gray-400">
-            {status === "lobby"
-              ? "Se activa en la Fase 3 (loop de juego)."
-              : `Estado: ${status}`}
-          </p>
+          {teams.length < 2 && <p className="text-xs text-gray-400">Hacen falta al menos 2 equipos.</p>}
+          {startError && <p className="text-xs text-red-600">{startError}</p>}
         </div>
       )}
     </main>
