@@ -5,6 +5,8 @@ import { QRCodeSVG } from "qrcode.react";
 
 export type LobbyTeam = { teamId: string; name: string; joinOrder: number; connected: boolean };
 
+const TARGET_OPTIONS = [5, 7, 10, 12, 15];
+
 /**
  * Vista de lobby (presentacional). La suscripción al canal y el merge de presencia
  * los maneja BoardClient; acá solo mostramos código + QR + equipos + "Empezar".
@@ -20,11 +22,12 @@ export default function Lobby({
   roomCode: string;
   teams: LobbyTeam[];
   isHost: boolean;
-  onStart: () => void;
+  onStart: (targetCards: number) => void;
   starting: boolean;
   startError: string | null;
 }) {
   const [joinUrl, setJoinUrl] = useState<string | null>(null);
+  const [target, setTarget] = useState(10);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- valor client-only (window.location)
     setJoinUrl(`${window.location.origin}/join?code=${roomCode}`);
@@ -74,9 +77,23 @@ export default function Lobby({
       </section>
 
       {isHost && (
-        <div className="flex flex-col items-center gap-2">
+        <div className="flex flex-col items-center gap-3">
+          <label className="flex items-center gap-2 text-sm text-gray-600">
+            Cartas para ganar:
+            <select
+              value={target}
+              onChange={(e) => setTarget(Number(e.target.value))}
+              className="rounded border px-2 py-1"
+            >
+              {TARGET_OPTIONS.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
           <button
-            onClick={onStart}
+            onClick={() => onStart(target)}
             disabled={starting || teams.length < 2}
             className="rounded-full bg-black px-8 py-3 font-semibold text-white hover:bg-gray-800 disabled:opacity-40"
           >

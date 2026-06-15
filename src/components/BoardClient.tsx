@@ -55,11 +55,15 @@ export default function BoardClient({ roomCode, isHost }: { roomCode: string; is
     };
   }, [roomCode, refetch]);
 
-  const startGame = useCallback(async () => {
+  const startGame = useCallback(async (targetCards: number) => {
     setStarting(true);
     setStartError(null);
     try {
-      const res = await fetch(`/api/games/${roomCode}/start`, { method: "POST" });
+      const res = await fetch(`/api/games/${roomCode}/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetCards }),
+      });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         const msgs: Record<string, string> = {
@@ -77,6 +81,23 @@ export default function BoardClient({ roomCode, isHost }: { roomCode: string; is
       setStarting(false);
     }
   }, [roomCode, refetch]);
+
+  // Acciones del host/board (reveal, resolve, timeout). Avisa al canal y re-lee.
+  const act = useCallback(
+    async (path: string, body?: object) => {
+      const res = await fetch(`/api/games/${roomCode}/${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      if (res.ok) {
+        channelRef.current?.send({ type: "broadcast", event: GameEvent.StateChanged, payload: {} });
+        await refetch();
+      }
+      return res;
+    },
+    [roomCode, refetch]
+  );
 
   const lobbyTeams: LobbyTeam[] = useMemo(() => {
     const byId = new Map<string, LobbyTeam>();
@@ -108,5 +129,5 @@ export default function BoardClient({ roomCode, isHost }: { roomCode: string; is
     );
   }
 
-  return <GameBoard state={state} isHost={isHost} />;
+  return <GameBoard state={state} isHost={isHost} act={act} />;
 }

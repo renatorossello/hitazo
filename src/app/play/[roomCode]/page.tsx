@@ -1,12 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { gameChannel, GameEvent } from "@/lib/game/events";
 import { loadPlayer, type StoredPlayer } from "@/lib/game/player";
 import type { GameState } from "@/lib/game/state";
+import PlayerGame from "@/components/PlayerGame";
 
 export default function PlayPage() {
   const params = useParams<{ roomCode: string }>();
@@ -15,6 +17,7 @@ export default function PlayPage() {
   const [resolved, setResolved] = useState<{ player: StoredPlayer | null } | null>(null);
   const [connected, setConnected] = useState(false);
   const [state, setState] = useState<GameState | null>(null);
+  const channelRef = useRef<RealtimeChannel | null>(null);
   const player = resolved?.player ?? null;
 
   useEffect(() => {
@@ -27,7 +30,6 @@ export default function PlayPage() {
     if (res.ok) setState(await res.json());
   }, [roomCode]);
 
-  // Presencia (para que el board me vea) + escucha de cambios de estado.
   useEffect(() => {
     if (!player) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch inicial async (setState post-await)
@@ -36,6 +38,7 @@ export default function PlayPage() {
     const channel = supabase.channel(gameChannel(roomCode), {
       config: { presence: { key: player.teamId } },
     });
+    channelRef.current = channel;
     channel.on("broadcast", { event: GameEvent.StateChanged }, () => refetch());
     channel.subscribe(async (status) => {
       if (status === "SUBSCRIBED") {
@@ -44,10 +47,28 @@ export default function PlayPage() {
       }
     });
     return () => {
+      channelRef.current = null;
       setConnected(false);
       supabase.removeChannel(channel);
     };
   }, [player, roomCode, refetch]);
+
+  // Manda una intención al server (con el teamId) y avisa al canal si prosperó.
+  const act = useCallback(
+    async (path: string, body?: object) => {
+      const res = await fetch(`/api/games/${roomCode}/${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teamId: player?.teamId, ...body }),
+      });
+      if (res.ok) {
+        channelRef.current?.send({ type: "broadcast", event: GameEvent.StateChanged, payload: {} });
+        await refetch();
+      }
+      return res;
+    },
+    [roomCode, player, refetch]
+  );
 
   if (!resolved) return null;
 
@@ -63,9 +84,6 @@ export default function PlayPage() {
   }
 
   const myTeam = state?.teams.find((t) => t.id === player.teamId) ?? null;
-  const round = state?.round ?? null;
-  const turnTeam = state?.teams.find((t) => t.id === round?.teamId) ?? null;
-  const isMyTurn = round?.teamId === player.teamId;
 
   return (
     <main className="flex flex-1 flex-col items-center gap-6 p-8 text-center">
@@ -83,19 +101,10 @@ export default function PlayPage() {
         <p className="max-w-xs text-sm text-gray-400">Esperando que el host arranque la partida…</p>
       ) : state.status === "finished" ? (
         <p className="text-lg font-semibold">
-          {state.winnerTeamId === player.teamId ? "🏆 ¡Ganaron!" : "Terminó la partida."}
+          {state.winnerTeamId === player.teamId ? "🏆 ¡Ganaron!" : `Terminó. Ganó ${state.teams.find((t) => t.id === state.winnerTeamId)?.name ?? "—"}.`}
         </p>
-      ) : isMyTurn ? (
-        <div className="flex flex-col items-center gap-2">
-          <p className="rounded-md bg-black px-5 py-3 text-lg font-bold text-white">¡Es tu turno!</p>
-          <p className="max-w-xs text-sm text-gray-500">
-            Escuchá el tema. La ubicación en tu línea de tiempo llega en la Parte 2.
-          </p>
-        </div>
       ) : (
-        <p className="max-w-xs text-sm text-gray-500">
-          Turno de <strong>{turnTeam?.name ?? "…"}</strong>. Escuchá el tema.
-        </p>
+        <PlayerGame state={state} player={player} act={act} />
       )}
     </main>
   );

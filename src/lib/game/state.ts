@@ -36,6 +36,7 @@ export type StateRound = {
   turnIndex: number;
   teamId: string | null;
   phase: string; // playing | challenge | reveal | resolved
+  played: boolean; // la carta ya empezó a sonar
   cardUri: string | null; // solo para el host
   guessedMeta: boolean;
   placedPosition: number | null;
@@ -46,7 +47,6 @@ export type StateRound = {
   cardWinnerId: string | null;
   metaAwarded: boolean | null;
   reveal: RoundReveal | null;
-  votes: { teamId: string; vote: boolean }[];
 };
 
 export type GameConfig = {
@@ -134,7 +134,7 @@ export async function loadGameState(
     const { data: r } = await supabase
       .from("ct_rounds")
       .select(
-        "id, turn_index, team_id, phase, guessed_meta, placed_position, placed_correct, challenger_id, challenge_position, challenge_correct, card_winner_id, meta_awarded, ct_cards(title, artist, cover_url, release_year, spotify_uri)"
+        "id, turn_index, team_id, phase, played, guessed_meta, placed_position, placed_correct, challenger_id, challenge_position, challenge_correct, card_winner_id, meta_awarded, ct_cards(title, artist, cover_url, release_year, spotify_uri)"
       )
       .eq("game_id", game.id)
       .eq("turn_index", game.current_turn)
@@ -144,16 +144,12 @@ export async function loadGameState(
       const card = (r.ct_cards as unknown as EmbeddedCard) ?? null;
       const revealed = r.phase === "reveal" || r.phase === "resolved";
 
-      const { data: votes } = await supabase
-        .from("ct_round_votes")
-        .select("team_id, vote")
-        .eq("round_id", r.id);
-
       round = {
         id: r.id as string,
         turnIndex: r.turn_index as number,
         teamId: (r.team_id as string) ?? null,
         phase: r.phase as string,
+        played: Boolean(r.played),
         cardUri: opts.includeCardUri ? (card?.spotify_uri ?? null) : null,
         guessedMeta: Boolean(r.guessed_meta),
         placedPosition: (r.placed_position as number) ?? null,
@@ -172,7 +168,6 @@ export async function loadGameState(
                 coverUrl: card.cover_url,
               }
             : null,
-        votes: (votes ?? []).map((v) => ({ teamId: v.team_id as string, vote: v.vote as boolean })),
       };
     }
 

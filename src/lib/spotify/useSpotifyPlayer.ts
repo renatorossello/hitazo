@@ -124,10 +124,14 @@ export function useSpotifyPlayer() {
     await playerRef.current?.[isPaused ? "resume" : "pause"]();
   }, [isPaused]);
 
+  const pause = useCallback(async () => {
+    if (!isPaused) await playerRef.current?.pause();
+  }, [isPaused]);
+
   const replay = useCallback(async () => {
     await playerRef.current?.seek(0);
     await playerRef.current?.resume();
   }, []);
 
-  return { status, message, deviceId, isPaused, play, togglePlay, replay };
+  return { status, message, deviceId, isPaused, play, togglePlay, pause, replay };
 }

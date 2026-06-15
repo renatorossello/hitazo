@@ -8,16 +8,17 @@ import { pickUnusedCards } from "@/lib/game/deck";
  * Setup: reparte 1 carta ancla revelada por equipo (con 1 ficha, ya por default),
  * fija el orden de turnos (join_order), elige la primera carta y arranca el turno 0.
  */
-export async function POST(_req: NextRequest, { params }: { params: Promise<{ roomCode: string }> }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ roomCode: string }> }) {
   if (!(await isHostAuthenticated())) {
     return NextResponse.json({ error: "no_host_session" }, { status: 401 });
   }
   const { roomCode } = await params;
+  const body = (await req.json().catch(() => ({}))) as { targetCards?: number };
   const supabase = createServiceClient();
 
   const { data: game } = await supabase
     .from("ct_games")
-    .select("id, status, filter_ids")
+    .select("id, status, filter_ids, config")
     .eq("room_code", roomCode.toUpperCase())
     .single();
   if (!game) return NextResponse.json({ error: "game_not_found" }, { status: 404 });
@@ -66,9 +67,17 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ ro
   });
   if (roundErr) return NextResponse.json({ error: roundErr.message }, { status: 500 });
 
+  // targetCards configurable (cae al default del config existente si no viene/ inválido).
+  const existingConfig = (game.config as Record<string, unknown>) ?? {};
+  const target = Number(body.targetCards);
+  const config =
+    Number.isInteger(target) && target >= 3 && target <= 30
+      ? { ...existingConfig, targetCards: target }
+      : existingConfig;
+
   const { error: gameErr } = await supabase
     .from("ct_games")
-    .update({ status: "playing", current_turn: 0 })
+    .update({ status: "playing", current_turn: 0, config })
     .eq("id", game.id);
   if (gameErr) return NextResponse.json({ error: gameErr.message }, { status: 500 });
 
