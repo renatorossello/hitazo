@@ -69,7 +69,7 @@ export default function BoardClient({ roomCode, isHost }: { roomCode: string; is
     };
   }, [roomCode, refetch]);
 
-  const startGame = useCallback(async (cfg: { targetCards: number; challengeWindowSec: number; closeTurnSec: number }) => {
+  const startGame = useCallback(async (cfg: { targetCards: number; challengeWindowSec: number; closeTurnSec: number; filterIds: string[] }) => {
     setStarting(true);
     setStartError(null);
     try {

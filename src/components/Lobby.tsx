@@ -5,7 +5,13 @@ import { QRCodeSVG } from "qrcode.react";
 import Logo from "./Logo";
 
 export type LobbyTeam = { teamId: string; name: string; joinOrder: number; connected: boolean };
-export type StartConfig = { targetCards: number; challengeWindowSec: number; closeTurnSec: number };
+export type StartConfig = {
+  targetCards: number;
+  challengeWindowSec: number;
+  closeTurnSec: number;
+  filterIds: string[];
+};
+type Deck = { id: string; name: string; total: number; playable: number };
 
 const TARGET_OPTIONS = [5, 7, 10, 12, 15];
 const CHALLENGE_OPTIONS = [15, 20, 30, 45, 60];
@@ -34,11 +40,24 @@ export default function Lobby({
   const [target, setTarget] = useState(10);
   const [challengeSec, setChallengeSec] = useState(30);
   const [closeSec, setCloseSec] = useState(20);
+  const [decks, setDecks] = useState<Deck[]>([]);
+  const [selectedDecks, setSelectedDecks] = useState<string[]>([]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- valor client-only (window.location)
     setJoinUrl(`${window.location.origin}/join?code=${roomCode}`);
   }, [roomCode]);
+
+  useEffect(() => {
+    if (!isHost) return;
+    fetch("/api/admin/decks")
+      .then((r) => (r.ok ? r.json() : { decks: [] }))
+      .then((d) => setDecks(d.decks ?? []))
+      .catch(() => {});
+  }, [isHost]);
+
+  const toggleDeck = (id: string) =>
+    setSelectedDecks((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
   return (
     <main className="flex min-h-full flex-1 flex-col items-center gap-8 bg-gradient-to-b from-brand-deep to-brand-dark p-6 text-white sm:p-10">
@@ -93,6 +112,27 @@ export default function Lobby({
 
       {isHost && (
         <div className="flex flex-col items-center gap-3">
+          {decks.length > 0 && (
+            <div className="flex w-full max-w-md flex-col items-center gap-1.5">
+              <p className="text-sm text-violet-200">Mazos (ninguno = todas las canciones):</p>
+              <div className="flex flex-wrap justify-center gap-2">
+                {decks.map((d) => {
+                  const on = selectedDecks.includes(d.id);
+                  return (
+                    <button
+                      key={d.id}
+                      onClick={() => toggleDeck(d.id)}
+                      className={`rounded-full px-3 py-1.5 text-sm font-semibold transition ${
+                        on ? "bg-accent text-brand-deep" : "bg-white/10 text-violet-100 ring-1 ring-white/20"
+                      }`}
+                    >
+                      {d.name} <span className="opacity-60">({d.playable})</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm text-violet-200">
             <label className="flex items-center gap-2">
               Cartas para ganar:
@@ -138,7 +178,14 @@ export default function Lobby({
             </label>
           </div>
           <button
-            onClick={() => onStart({ targetCards: target, challengeWindowSec: challengeSec, closeTurnSec: closeSec })}
+            onClick={() =>
+              onStart({
+                targetCards: target,
+                challengeWindowSec: challengeSec,
+                closeTurnSec: closeSec,
+                filterIds: selectedDecks,
+              })
+            }
             disabled={starting || teams.length < 2}
             className="rounded-2xl bg-accent px-10 py-4 text-lg font-bold text-brand-deep shadow-lg transition hover:brightness-105 active:scale-[0.98] disabled:opacity-40"
           >

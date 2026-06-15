@@ -18,6 +18,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
     targetCards?: number;
     challengeWindowSec?: number;
     closeTurnSec?: number;
+    filterIds?: string[];
   };
   const supabase = createServiceClient();
 
@@ -41,7 +42,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
     return NextResponse.json({ error: "need_two_teams" }, { status: 400 });
   }
 
-  const filterIds = (game.filter_ids as string[]) ?? null;
+  // Mazos elegidos en el lobby (vacío = todas las canciones).
+  const filterIds = Array.isArray(body.filterIds) && body.filterIds.length > 0 ? body.filterIds : null;
 
   // Anclas: 1 carta por equipo. Necesitamos además al menos 1 para el primer turno.
   const anchors = await pickUnusedCards(supabase, game.id, filterIds, teams.length);
@@ -85,7 +87,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
 
   const { error: gameErr } = await supabase
     .from("ct_games")
-    .update({ status: "playing", current_turn: 0, config })
+    .update({ status: "playing", current_turn: 0, config, filter_ids: filterIds ?? [] })
     .eq("id", game.id);
   if (gameErr) return NextResponse.json({ error: gameErr.message }, { status: 500 });
 

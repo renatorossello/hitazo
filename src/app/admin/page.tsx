@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { SpotifyTrack } from "@/lib/deck-engine";
 
 type Progress = Record<string, number>;
@@ -19,11 +19,48 @@ export default function AdminPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
+  const [playlistUrl, setPlaylistUrl] = useState("");
+  const [deckName, setDeckName] = useState("");
+  const [decks, setDecks] = useState<{ id: string; name: string; total: number; playable: number }[]>([]);
 
   const refreshProgress = useCallback(async () => {
     const res = await fetch("/api/admin/resolve/progress");
     if (res.ok) setProgress(await res.json());
   }, []);
+
+  const loadDecks = useCallback(async () => {
+    const res = await fetch("/api/admin/decks");
+    if (res.ok) setDecks((await res.json()).decks);
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga async inicial
+    loadDecks();
+    refreshProgress();
+  }, [loadDecks, refreshProgress]);
+
+  async function importPlaylist() {
+    if (!playlistUrl.trim()) return setMsg("Pegá el link de una playlist.");
+    setBusy("playlist");
+    setMsg("Importando la playlist (puede tardar según el tamaño)…");
+    try {
+      const res = await fetch("/api/admin/playlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: playlistUrl, deckName: deckName || undefined }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) return setMsg("No hay sesión de host. Conectate con Spotify en /host.");
+      if (res.status === 404) return setMsg("No se pudo acceder a la playlist. ¿Es una editorial de Spotify? Esas están restringidas; usá una playlist de usuario.");
+      if (!res.ok) return setMsg(`Error: ${data.error}`);
+      setMsg(`Importadas ${data.imported} canciones al mazo "${data.deckName}". Ahora resolvé los años abajo.`);
+      setPlaylistUrl("");
+      setDeckName("");
+      await Promise.all([refreshProgress(), loadDecks()]);
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function seedFamous() {
     setBusy("seed");
@@ -141,9 +178,39 @@ export default function AdminPage() {
         </button>
       </section>
 
+      {/* Importar de playlist */}
+      <section className="flex flex-col gap-3 rounded-lg border-2 border-[#1DB954]/40 p-4">
+        <h2 className="font-semibold">🎵 Importar de una playlist de Spotify</h2>
+        <p className="text-sm text-gray-500">
+          Pegá el link de una playlist <strong>de usuario</strong> (las tuyas o públicas de otros). Trae todas sus
+          canciones y crea un mazo con ellas. (Las editoriales oficiales de Spotify están restringidas por su API.)
+        </p>
+        <input
+          className="rounded border px-3 py-2 text-sm"
+          placeholder="https://open.spotify.com/playlist/…"
+          value={playlistUrl}
+          onChange={(e) => setPlaylistUrl(e.target.value)}
+        />
+        <div className="flex flex-wrap gap-2">
+          <input
+            className="flex-1 rounded border px-3 py-2 text-sm"
+            placeholder="nombre del mazo (opcional, default = nombre de la playlist)"
+            value={deckName}
+            onChange={(e) => setDeckName(e.target.value)}
+          />
+          <button
+            onClick={importPlaylist}
+            disabled={busy !== null}
+            className="rounded-full bg-[#1DB954] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {busy === "playlist" ? "Importando…" : "Importar playlist"}
+          </button>
+        </div>
+      </section>
+
       {/* Buscar */}
       <section className="flex flex-col gap-3 rounded-lg border p-4">
-        <h2 className="font-semibold">1. Buscar e importar</h2>
+        <h2 className="font-semibold">Buscar e importar (alternativa)</h2>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           <input className="rounded border px-2 py-1 text-sm" placeholder="texto" value={text} onChange={(e) => setText(e.target.value)} />
           <input className="rounded border px-2 py-1 text-sm" placeholder="artista" value={artist} onChange={(e) => setArtist(e.target.value)} />
@@ -205,6 +272,26 @@ export default function AdminPage() {
             (corregilos en <Link href="/admin/review" className="text-brand underline">Revisar años</Link>)
           </p>
         )}
+      </section>
+
+      {/* Mazos */}
+      <section className="flex flex-col gap-2 rounded-lg border p-4">
+        <h2 className="font-semibold">Mazos ({decks.length})</h2>
+        {decks.length === 0 ? (
+          <p className="text-sm text-gray-400">Todavía no hay mazos. Importá una playlist para crear uno.</p>
+        ) : (
+          <ul className="flex flex-col gap-1 text-sm">
+            {decks.map((d) => (
+              <li key={d.id} className="flex items-center justify-between rounded px-2 py-1 hover:bg-gray-50">
+                <span className="font-medium">{d.name}</span>
+                <span className="text-gray-500">
+                  {d.playable} jugables / {d.total} total
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="text-xs text-gray-400">En el lobby elegís qué mazos usar (o todos si no elegís ninguno).</p>
       </section>
 
       {msg && <p className="rounded-md bg-gray-100 px-4 py-2 text-sm text-gray-700">{msg}</p>}

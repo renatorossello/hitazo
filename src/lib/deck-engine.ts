@@ -201,6 +201,75 @@ export async function enrichWithGenres(token: string, tracks: SpotifyTrack[]): P
   }
 }
 
+// ------------------------- 1c) Playlists -----------------------------------
+/** Extrae el ID de playlist de una URL, URI o ID pelado. */
+export function parsePlaylistId(input: string): string | null {
+  const m = input.match(/playlist[/:]([a-zA-Z0-9]+)/);
+  if (m) return m[1];
+  if (/^[a-zA-Z0-9]{16,}$/.test(input.trim())) return input.trim();
+  return null;
+}
+
+export async function fetchPlaylistName(token: string, playlistId: string): Promise<string | null> {
+  const res = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}?fields=name`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.status === 401) throw new SpotifyAuthError("Token de Spotify vencido o inválido.");
+  if (!res.ok) return null;
+  return (await res.json())?.name ?? null;
+}
+
+type PlaylistItem = { track: SpotifySearchItem | null };
+
+/** Trae los tracks de una playlist (de usuario; las editoriales de Spotify están restringidas). */
+export async function fetchPlaylistTracks(
+  token: string,
+  playlistId: string,
+  max = 1000
+): Promise<SpotifyTrack[]> {
+  const out: SpotifyTrack[] = [];
+  const fields = "items(track(id,uri,name,artists(id,name),external_ids(isrc),album(images,release_date))),next";
+  let offset = 0;
+
+  while (out.length < max) {
+    const url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100&offset=${offset}&fields=${encodeURIComponent(fields)}`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (res.status === 401) throw new SpotifyAuthError("Token de Spotify vencido o inválido.");
+    if (res.status === 404) throw new Error("playlist_not_found");
+    if (res.status === 429) {
+      const retry = Number(res.headers.get("retry-after") ?? "2");
+      await sleep((retry + 1) * 1000);
+      continue;
+    }
+    if (!res.ok) throw new Error(`Spotify playlist ${res.status}: ${await res.text()}`);
+
+    const data = await res.json();
+    const items: PlaylistItem[] = data.items ?? [];
+    if (items.length === 0) break;
+
+    for (const it of items) {
+      const t = it.track;
+      if (!t?.id) continue; // tracks locales / no disponibles
+      out.push({
+        spotify_id: t.id,
+        spotify_uri: t.uri,
+        title: t.name,
+        artist: (t.artists ?? []).map((a) => a.name).join(", "),
+        artist_id: t.artists?.[0]?.id ?? null,
+        isrc: t.external_ids?.isrc ?? null,
+        cover_url: t.album?.images?.[0]?.url ?? null,
+        spotify_year: parseYear(t.album?.release_date),
+      });
+      if (out.length >= max) break;
+    }
+
+    if (!data.next) break;
+    offset += 100;
+  }
+
+  return out;
+}
+
 // ----------------------------- 2) Import -----------------------------------
 /**
  * Guarda tracks como cartas 'pending' en el pool global (con géneros/categoría/región
