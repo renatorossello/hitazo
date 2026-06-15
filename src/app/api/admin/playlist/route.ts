@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     if (e instanceof SpotifyAuthError) return NextResponse.json({ error: "spotify_auth" }, { status: 401 });
     if (String(e).includes("playlist_forbidden")) {
-      return NextResponse.json({ error: "playlist_forbidden" }, { status: 403 });
+      return NextResponse.json({ error: "playlist_forbidden", detail: String(e).slice(0, 220) }, { status: 403 });
     }
     if (String(e).includes("playlist_not_found")) {
       return NextResponse.json({ error: "playlist_not_found" }, { status: 404 });

@@ -95,6 +95,9 @@ export function buildAuthorizeUrl(challenge: string, state: string): string {
     code_challenge: challenge,
     state,
     scope: SPOTIFY_SCOPES,
+    // Fuerza la pantalla de consentimiento: si no, al estar ya autorizada, Spotify
+    // saltea el consent y devuelve el token con los scopes viejos (sin playlists).
+    show_dialog: "true",
   });
   return `${AUTHORIZE_URL}?${params.toString()}`;
 }
