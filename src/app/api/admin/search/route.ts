@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getValidAccessToken } from "@/lib/spotify/auth";
-import { searchTracks, SpotifyAuthError } from "@/lib/deck-engine";
+import { searchTracks, enrichWithGenres, SpotifyAuthError } from "@/lib/deck-engine";
 
 /**
  * POST /api/admin/search  { yearFrom?, yearTo?, genre?, text?, max? }
@@ -20,9 +20,11 @@ export async function POST(req: NextRequest) {
       yearFrom: body.yearFrom,
       yearTo: body.yearTo,
       genre: body.genre,
+      artist: body.artist,
       text: body.text,
       max: body.max ?? 50,
     });
+    await enrichWithGenres(token, tracks); // géneros del artista + categoría/región
     return NextResponse.json({ tracks });
   } catch (e) {
     if (e instanceof SpotifyAuthError) {

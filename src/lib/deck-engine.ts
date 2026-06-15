@@ -25,15 +25,20 @@ export type SpotifyTrack = {
   spotify_uri: string;
   title: string;
   artist: string;
+  artist_id: string | null; // artista principal (para traer géneros)
   isrc: string | null;
   cover_url: string | null;
   spotify_year: number | null;
+  genres?: string[]; // crudos del artista
+  genreBuckets?: string[]; // categorías amplias derivadas
+  region?: string; // idioma/región aprox
 };
 
 export type SearchParams = {
   yearFrom?: number;
   yearTo?: number;
   genre?: string;
+  artist?: string;
   text?: string; // texto libre opcional
   max?: number;  // tope de resultados (default 50, máx útil 1000 por límite de Spotify)
 };
@@ -43,7 +48,7 @@ type SpotifySearchItem = {
   id: string;
   uri: string;
   name: string;
-  artists?: { name: string }[];
+  artists?: { id: string; name: string }[];
   external_ids?: { isrc?: string };
   album?: { images?: { url: string }[]; release_date?: string };
 };
@@ -67,6 +72,7 @@ export async function searchTracks(
   const max = params.max ?? 50;
   const parts: string[] = [];
   if (params.text) parts.push(params.text);
+  if (params.artist) parts.push(`artist:${params.artist}`);
   if (params.yearFrom && params.yearTo) parts.push(`year:${params.yearFrom}-${params.yearTo}`);
   if (params.genre) parts.push(`genre:${params.genre}`);
   const q = encodeURIComponent(parts.join(" ").trim());
@@ -100,6 +106,7 @@ export async function searchTracks(
         spotify_uri: t.uri,
         title: t.name,
         artist: (t.artists ?? []).map((a) => a.name).join(", "),
+        artist_id: t.artists?.[0]?.id ?? null,
         isrc: t.external_ids?.isrc ?? null,
         cover_url: t.album?.images?.[0]?.url ?? null,
         spotify_year: parseYear(t.album?.release_date),
@@ -116,12 +123,92 @@ export async function searchTracks(
 
 export class SpotifyAuthError extends Error {} // las rutas la pueden catchear p/ refrescar token
 
+// ------------------------- 1b) Géneros / región ----------------------------
+// Spotify da géneros a nivel ARTISTA y muy granulares. Los traemos y derivamos
+// categorías amplias + una región/idioma aproximado (editable a mano después).
+
+const BUCKET_KEYWORDS: Record<string, string[]> = {
+  Pop: ["pop"],
+  Rock: ["rock", "punk", "grunge", "britpop"],
+  Metal: ["metal"],
+  "Rap/Hip-hop": ["hip hop", "rap", "trap", "drill"],
+  "R&B/Soul": ["r&b", "rnb", "soul", "funk", "motown"],
+  Electrónica: ["edm", "house", "techno", "trance", "electro", "dance", "dubstep", "drum and bass", "synth"],
+  Latino: ["latin", "reggaeton", "tango", "cumbia", "salsa", "bachata", "merengue", "ranchera", "mariachi", "bolero", "vallenato", "norteñ", "banda", "corrido", "flamenco", "español", "argentin", "mexican", "cuarteto"],
+  Reggae: ["reggae", "ska", "dancehall"],
+  "Folk/Country": ["folk", "country", "americana", "bluegrass"],
+  "Jazz/Blues": ["jazz", "blues", "swing"],
+  "Indie/Alt": ["indie", "alternative", "alt "],
+  Clásica: ["classical", "orchestra", "opera", "soundtrack"],
+};
+
+const REGION_KEYWORDS: { region: string; kw: string[] }[] = [
+  { region: "Latino", kw: ["latin", "reggaeton", "tango", "cumbia", "salsa", "bachata", "merengue", "ranchera", "mariachi", "bolero", "vallenato", "norteñ", "banda", "corrido", "español", "argentin", "mexican", "chilean", "colombian", "cuarteto", "rock en espanol", "rock nacional"] },
+  { region: "Brasil", kw: ["brazil", "mpb", "bossa", "samba", "sertanejo", "pagode", "forró", "axé", "funk carioca"] },
+  { region: "K-pop", kw: ["k-pop", "korean"] },
+  { region: "J-pop", kw: ["j-pop", "japanese", "j-rock", "anime"] },
+  { region: "Francés", kw: ["french", "chanson", "française", "variété"] },
+  { region: "Italiano", kw: ["italian", "italo"] },
+  { region: "Alemán", kw: ["german", "deutsch", "schlager"] },
+];
+
+export function deriveBuckets(genres: string[]): string[] {
+  const lower = genres.map((g) => g.toLowerCase());
+  const buckets: string[] = [];
+  for (const [bucket, kws] of Object.entries(BUCKET_KEYWORDS)) {
+    if (lower.some((g) => kws.some((k) => g.includes(k)))) buckets.push(bucket);
+  }
+  return buckets.length ? buckets : ["Otros"];
+}
+
+export function deriveRegion(genres: string[]): string {
+  const lower = genres.map((g) => g.toLowerCase());
+  for (const { region, kw } of REGION_KEYWORDS) {
+    if (lower.some((g) => kw.some((k) => g.includes(k)))) return region;
+  }
+  return genres.length ? "Anglo" : "Desconocido";
+}
+
+/** Trae los géneros del artista (batch) y los pega + deriva categoría/región. */
+export async function enrichWithGenres(token: string, tracks: SpotifyTrack[]): Promise<void> {
+  const ids = [...new Set(tracks.map((t) => t.artist_id).filter((x): x is string => Boolean(x)))];
+  const genreByArtist = new Map<string, string[]>();
+
+  for (let i = 0; i < ids.length; i += 50) {
+    const batch = ids.slice(i, i + 50);
+    const res = await fetch(`https://api.spotify.com/v1/artists?ids=${batch.join(",")}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.status === 401) throw new SpotifyAuthError("Token de Spotify vencido o inválido.");
+    if (res.status === 429) {
+      const retry = Number(res.headers.get("retry-after") ?? "2");
+      await sleep((retry + 1) * 1000);
+      i -= 50;
+      continue;
+    }
+    if (!res.ok) continue;
+    const data = await res.json();
+    for (const a of (data.artists ?? []) as { id: string; genres?: string[] }[]) {
+      if (a?.id) genreByArtist.set(a.id, a.genres ?? []);
+    }
+  }
+
+  for (const t of tracks) {
+    const genres = (t.artist_id && genreByArtist.get(t.artist_id)) || [];
+    t.genres = genres;
+    t.genreBuckets = deriveBuckets(genres);
+    t.region = deriveRegion(genres);
+  }
+}
+
 // ----------------------------- 2) Import -----------------------------------
-/** Guarda tracks seleccionados como cartas 'pending' y las vincula a un mazo. */
+/**
+ * Guarda tracks como cartas 'pending' en el pool global (con géneros/categoría/región
+ * si vienen enriquecidos). Los mazos se arman por criterios, no por vínculo manual.
+ */
 export async function importTracks(
   supabase: SupabaseClient,
-  tracks: SpotifyTrack[],
-  filterId: string
+  tracks: SpotifyTrack[]
 ): Promise<{ imported: number }> {
   if (tracks.length === 0) return { imported: 0 };
 
@@ -133,6 +220,9 @@ export async function importTracks(
     artist: t.artist,
     spotify_year: t.spotify_year,
     cover_url: t.cover_url,
+    genres: t.genres ?? null,
+    genre_buckets: t.genreBuckets ?? null,
+    region: t.region ?? null,
     year_status: "pending" as const,
   }));
 
@@ -141,12 +231,6 @@ export async function importTracks(
     .upsert(rows, { onConflict: "spotify_uri", ignoreDuplicates: false })
     .select("id");
   if (error) throw error;
-
-  // vincular al filtro/mazo
-  const links = (data ?? []).map((c) => ({ card_id: c.id, filter_id: filterId }));
-  if (links.length) {
-    await supabase.from("ct_card_filters").upsert(links, { onConflict: "card_id,filter_id" });
-  }
 
   return { imported: data?.length ?? 0 };
 }
