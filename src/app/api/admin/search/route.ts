@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
       text: body.text,
       max: body.max ?? 50,
     });
-    await enrichWithGenres(token, tracks); // géneros del artista + categoría/región
+    await enrichWithGenres(tracks); // género por Deezer (Spotify /artists está bloqueado)
     return NextResponse.json({ tracks });
   } catch (e) {
     if (e instanceof SpotifyAuthError) {

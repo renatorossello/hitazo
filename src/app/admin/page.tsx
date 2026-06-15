@@ -21,6 +21,7 @@ export default function AdminPage() {
   const [progress, setProgress] = useState<Progress | null>(null);
   const [playlistUrl, setPlaylistUrl] = useState("");
   const [deckName, setDeckName] = useState("");
+  const [resultsAreDeck, setResultsAreDeck] = useState(false);
   const [decks, setDecks] = useState<{ id: string; name: string; total: number; playable: number }[]>([]);
 
   const refreshProgress = useCallback(async () => {
@@ -39,28 +40,27 @@ export default function AdminPage() {
     refreshProgress();
   }, [loadDecks, refreshProgress]);
 
-  async function importPlaylist() {
+  async function loadPlaylist() {
     if (!playlistUrl.trim()) return setMsg("Pegá el link de una playlist.");
     setBusy("playlist");
-    setMsg("Importando la playlist (puede tardar según el tamaño)…");
+    setMsg("Leyendo la playlist y buscando géneros…");
     try {
       const res = await fetch("/api/admin/playlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: playlistUrl, deckName: deckName || undefined }),
+        body: JSON.stringify({ url: playlistUrl }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.status === 401) return setMsg("No hay sesión de host. Conectate con Spotify en /host.");
-      if (res.status === 403)
-        return setMsg(
-          `Spotify denegó el acceso (403). Reconectá Spotify en /host (logout + login) y APROBÁ el permiso de playlists en la pantalla de consentimiento. Detalle: ${data.detail ?? ""}`
-        );
-      if (res.status === 404) return setMsg("No se pudo acceder a la playlist. ¿Es una editorial de Spotify? Esas están restringidas; usá una playlist de usuario.");
+      if (res.status === 404) return setMsg("No se pudo leer la playlist. Revisá el link (tiene que ser una playlist pública/tuya).");
       if (!res.ok) return setMsg(`Error: ${data.error}`);
-      setMsg(`Importadas ${data.imported} canciones al mazo "${data.deckName}". Ahora resolvé los años abajo.`);
-      setPlaylistUrl("");
-      setDeckName("");
-      await Promise.all([refreshProgress(), loadDecks()]);
+      setResults(data.tracks);
+      setResultsAreDeck(true);
+      setDeckName(data.deckName ?? "Playlist");
+      const sel: Record<string, boolean> = {};
+      for (const t of data.tracks as SpotifyTrack[]) sel[t.spotify_id] = true;
+      setSelected(sel);
+      setMsg(`${data.tracks.length} temas en la playlist. Elegí cuáles importar y dale "Importar seleccionadas".`);
     } finally {
       setBusy(null);
     }
@@ -102,6 +102,7 @@ export default function AdminPage() {
       if (res.status === 401) return setMsg("No hay sesión de host. Conectate con Spotify en /host.");
       if (!res.ok) return setMsg(`Error: ${data.error}`);
       setResults(data.tracks);
+      setResultsAreDeck(false);
       const sel: Record<string, boolean> = {};
       for (const t of data.tracks as SpotifyTrack[]) sel[t.spotify_id] = true;
       setSelected(sel);
@@ -120,16 +121,27 @@ export default function AdminPage() {
       const res = await fetch("/api/admin/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tracks }),
+        body: JSON.stringify({
+          tracks,
+          deckName: resultsAreDeck ? deckName.trim() || "Playlist" : undefined,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) return setMsg(`Error al importar: ${data.error}`);
-      setMsg(`Importadas ${data.imported} cartas al pool. Resolvé los años abajo.`);
-      await refreshProgress();
+      setMsg(
+        `Importadas ${data.imported} cartas${data.deckName ? ` al mazo "${data.deckName}"` : " al pool"}. Resolvé los años abajo.`
+      );
+      await Promise.all([refreshProgress(), loadDecks()]);
     } finally {
       setBusy(null);
     }
   }
+
+  const allSelected = (val: boolean) => {
+    const sel: Record<string, boolean> = {};
+    for (const t of results) sel[t.spotify_id] = val;
+    setSelected(sel);
+  };
 
   async function resolveAll() {
     setBusy("resolve");
@@ -186,28 +198,22 @@ export default function AdminPage() {
       <section className="flex flex-col gap-3 rounded-lg border-2 border-[#1DB954]/40 p-4">
         <h2 className="font-semibold">🎵 Importar de una playlist de Spotify</h2>
         <p className="text-sm text-gray-500">
-          Pegá el link de una playlist <strong>de usuario</strong> (las tuyas o públicas de otros). Trae todas sus
-          canciones y crea un mazo con ellas. (Las editoriales oficiales de Spotify están restringidas por su API.)
+          Pegá el link de una playlist <strong>pública</strong> (tuya o de otros). Trae sus temas (vía la página pública,
+          porque la API de playlists está restringida) para que elijas cuáles importar como mazo.
         </p>
-        <input
-          className="rounded border px-3 py-2 text-sm"
-          placeholder="https://open.spotify.com/playlist/…"
-          value={playlistUrl}
-          onChange={(e) => setPlaylistUrl(e.target.value)}
-        />
         <div className="flex flex-wrap gap-2">
           <input
             className="flex-1 rounded border px-3 py-2 text-sm"
-            placeholder="nombre del mazo (opcional, default = nombre de la playlist)"
-            value={deckName}
-            onChange={(e) => setDeckName(e.target.value)}
+            placeholder="https://open.spotify.com/playlist/…"
+            value={playlistUrl}
+            onChange={(e) => setPlaylistUrl(e.target.value)}
           />
           <button
-            onClick={importPlaylist}
+            onClick={loadPlaylist}
             disabled={busy !== null}
             className="rounded-full bg-[#1DB954] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
           >
-            {busy === "playlist" ? "Importando…" : "Importar playlist"}
+            {busy === "playlist" ? "Leyendo…" : "Cargar playlist"}
           </button>
         </div>
       </section>
@@ -223,19 +229,42 @@ export default function AdminPage() {
           <input className="rounded border px-2 py-1 text-sm" placeholder="año hasta" value={yearTo} onChange={(e) => setYearTo(e.target.value)} />
           <input className="rounded border px-2 py-1 text-sm" placeholder="máx (50)" value={max} onChange={(e) => setMax(e.target.value)} />
         </div>
-        <div className="flex gap-2">
-          <button onClick={search} disabled={busy !== null} className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-            {busy === "search" ? "Buscando…" : "Buscar"}
-          </button>
-          <button onClick={importSelected} disabled={busy !== null || results.length === 0} className="rounded-full bg-[#1DB954] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-            {busy === "import" ? "Importando…" : "Importar seleccionadas"}
-          </button>
-        </div>
+        <button onClick={search} disabled={busy !== null} className="self-start rounded-full bg-black px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+          {busy === "search" ? "Buscando…" : "Buscar"}
+        </button>
       </section>
 
-      {/* Resultados */}
+      {/* Resultados + barra de selección/import */}
       {results.length > 0 && (
-        <ul className="flex max-h-96 flex-col gap-1 overflow-auto rounded-lg border p-2">
+        <div className="flex flex-col gap-2 rounded-lg border p-2">
+          <div className="flex flex-wrap items-center gap-2 border-b pb-2">
+            <span className="text-sm text-gray-500">
+              {Object.values(selected).filter(Boolean).length}/{results.length} seleccionados
+            </span>
+            <button onClick={() => allSelected(true)} className="rounded-full border px-3 py-1 text-xs font-semibold">
+              Seleccionar todos
+            </button>
+            <button onClick={() => allSelected(false)} className="rounded-full border px-3 py-1 text-xs font-semibold">
+              Deseleccionar todos
+            </button>
+            <div className="flex-1" />
+            {resultsAreDeck && (
+              <input
+                className="w-44 rounded border px-2 py-1 text-sm"
+                placeholder="nombre del mazo"
+                value={deckName}
+                onChange={(e) => setDeckName(e.target.value)}
+              />
+            )}
+            <button
+              onClick={importSelected}
+              disabled={busy !== null}
+              className="rounded-full bg-[#1DB954] px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {busy === "import" ? "Importando…" : "Importar seleccionadas"}
+            </button>
+          </div>
+          <ul className="flex max-h-96 flex-col gap-1 overflow-auto">
           {results.map((t) => (
             <li key={t.spotify_id} className="flex items-center gap-2 rounded px-2 py-1 text-sm hover:bg-gray-50">
               <input
@@ -253,10 +282,10 @@ export default function AdminPage() {
               <span className="hidden text-xs text-brand sm:inline">{(t.genreBuckets ?? []).join("/")}</span>
               <span className="hidden text-xs text-gray-400 sm:inline">{t.region}</span>
               <span className="text-gray-400">{t.spotify_year ?? "—"}</span>
-              {!t.isrc && <span className="text-amber-600" title="Sin ISRC: no se puede resolver el año">⚠</span>}
             </li>
           ))}
-        </ul>
+          </ul>
+        </div>
       )}
 
       {/* Resolver */}

@@ -169,36 +169,92 @@ export function deriveRegion(genres: string[]): string {
   return genres.length ? "Anglo" : "Desconocido";
 }
 
-/** Trae los géneros del artista (batch) y los pega + deriva categoría/región. */
-export async function enrichWithGenres(token: string, tracks: SpotifyTrack[]): Promise<void> {
-  const ids = [...new Set(tracks.map((t) => t.artist_id).filter((x): x is string => Boolean(x)))];
-  const genreByArtist = new Map<string, string[]>();
-
-  for (let i = 0; i < ids.length; i += 50) {
-    const batch = ids.slice(i, i + 50);
-    const res = await fetch(`https://api.spotify.com/v1/artists?ids=${batch.join(",")}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (res.status === 401) throw new SpotifyAuthError("Token de Spotify vencido o inválido.");
-    if (res.status === 429) {
-      const retry = Number(res.headers.get("retry-after") ?? "2");
-      await sleep((retry + 1) * 1000);
-      i -= 50;
-      continue;
-    }
-    if (!res.ok) continue;
-    const data = await res.json();
-    for (const a of (data.artists ?? []) as { id: string; genres?: string[] }[]) {
-      if (a?.id) genreByArtist.set(a.id, a.genres ?? []);
-    }
-  }
+/**
+ * Trae el género desde DEEZER (API pública, sin key) — Spotify bloquea /artists en
+ * Dev Mode. Busca el tema y toma los géneros del álbum. Cachea por artista (un género
+ * por artista alcanza para el bucket) para no spamear Deezer.
+ */
+export async function enrichWithGenres(tracks: SpotifyTrack[]): Promise<void> {
+  const cache = new Map<string, string[]>();
+  const albumGenreCache = new Map<number, string[]>();
 
   for (const t of tracks) {
-    const genres = (t.artist_id && genreByArtist.get(t.artist_id)) || [];
+    const firstArtist = t.artist.split(",")[0].trim();
+    const key = firstArtist.toLowerCase();
+    let genres = cache.get(key);
+
+    if (genres === undefined) {
+      genres = [];
+      try {
+        const q = `artist:"${firstArtist}" track:"${t.title}"`;
+        const s = await fetch(`https://api.deezer.com/search?limit=1&q=${encodeURIComponent(q)}`);
+        const sb = await s.json().catch(() => ({}));
+        const albumId: number | undefined = sb?.data?.[0]?.album?.id;
+        if (albumId) {
+          if (albumGenreCache.has(albumId)) {
+            genres = albumGenreCache.get(albumId)!;
+          } else {
+            const al = await fetch(`https://api.deezer.com/album/${albumId}`);
+            const alb = await al.json().catch(() => ({}));
+            genres = ((alb?.genres?.data ?? []) as { name: string }[]).map((g) => g.name);
+            albumGenreCache.set(albumId, genres);
+          }
+        }
+      } catch {
+        /* sin género si Deezer falla */
+      }
+      cache.set(key, genres);
+      await sleep(120); // respetar el rate limit de Deezer
+    }
+
     t.genres = genres;
     t.genreBuckets = deriveBuckets(genres);
     t.region = deriveRegion(genres);
   }
+}
+
+// ------------------------- 1d) Playlist por embed --------------------------
+type EmbedTrack = { uri?: string; title?: string; subtitle?: string };
+
+/**
+ * Lee los temas de una playlist desde su página EMBED pública (open.spotify.com/embed),
+ * porque la API de playlists está bloqueada en Dev Mode. Devuelve título/artista/uri
+ * (sin ISRC: el año se resuelve por título+artista).
+ */
+export async function fetchPlaylistViaEmbed(
+  playlistId: string
+): Promise<{ name: string | null; tracks: SpotifyTrack[] }> {
+  const res = await fetch(`https://open.spotify.com/embed/playlist/${playlistId}`, {
+    headers: { "User-Agent": "Mozilla/5.0" },
+  });
+  if (res.status === 404) throw new Error("playlist_not_found");
+  if (!res.ok) throw new Error(`embed ${res.status}`);
+
+  const html = await res.text();
+  const m = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
+  if (!m) throw new Error("embed_parse_failed");
+
+  const data = JSON.parse(m[1]);
+  const entity = data?.props?.pageProps?.state?.data?.entity;
+  const list: EmbedTrack[] = entity?.trackList ?? [];
+
+  const tracks: SpotifyTrack[] = [];
+  for (const it of list) {
+    const id = it.uri?.split(":").pop();
+    if (!id || !it.uri) continue;
+    tracks.push({
+      spotify_id: id,
+      spotify_uri: it.uri,
+      title: it.title ?? "",
+      artist: it.subtitle ?? "",
+      artist_id: null,
+      isrc: null,
+      cover_url: null,
+      spotify_year: null,
+    });
+  }
+
+  return { name: entity?.title ?? entity?.name ?? null, tracks };
 }
 
 // ------------------------- 1c) Playlists -----------------------------------
@@ -331,6 +387,32 @@ export async function getOriginalYear(
   return { year: candidates.length ? candidates[0] : null, candidates: [...new Set(candidates)] };
 }
 
+/** Año original por búsqueda de recording (título + artista) cuando no hay ISRC. */
+export async function getYearByTitleArtist(
+  title: string,
+  artist: string,
+  userAgent: string
+): Promise<{ year: number | null; candidates: number[] }> {
+  const q = `recording:"${title}" AND artist:"${artist}"`;
+  const url = `https://musicbrainz.org/ws/2/recording?query=${encodeURIComponent(q)}&fmt=json&limit=15`;
+  const res = await fetch(url, { headers: { "User-Agent": userAgent } });
+
+  if (res.status === 503) {
+    await sleep(2000);
+    return getYearByTitleArtist(title, artist, userAgent);
+  }
+  if (!res.ok) return { year: null, candidates: [] };
+
+  const data = await res.json();
+  const recs = (data.recordings ?? []) as MusicBrainzRecording[];
+  const candidates = recs
+    .map((r) => parseYear(r["first-release-date"]))
+    .filter((y): y is number => y !== null)
+    .sort((a, b) => a - b);
+
+  return { year: candidates.length ? candidates[0] : null, candidates: [...new Set(candidates)] };
+}
+
 // ----------------------------- 4) Resolución por lotes ----------------------
 /**
  * Toma hasta `limit` cartas 'pending', las resuelve contra MusicBrainz respetando
@@ -344,7 +426,7 @@ export async function resolvePendingBatch(
 ): Promise<{ processed: number; resolved: number; review: number; remaining: number }> {
   const { data: pending, error } = await supabase
     .from("ct_cards")
-    .select("id, isrc")
+    .select("id, isrc, title, artist")
     .eq("year_status", "pending")
     .limit(limit);
   if (error) throw error;
@@ -353,13 +435,10 @@ export async function resolvePendingBatch(
   let review = 0;
 
   for (const card of pending ?? []) {
-    if (!card.isrc) {
-      await supabase.from("ct_cards").update({ year_status: "needs_review" }).eq("id", card.id);
-      review++;
-      continue;
-    }
-
-    const { year, candidates } = await getOriginalYear(card.isrc, userAgent);
+    // Con ISRC: lookup directo. Sin ISRC (temas de playlist): por título + artista.
+    const { year, candidates } = card.isrc
+      ? await getOriginalYear(card.isrc, userAgent)
+      : await getYearByTitleArtist(card.title, card.artist, userAgent);
     await sleep(1100); // rate limit MusicBrainz: 1 req/seg
 
     if (year !== null) {

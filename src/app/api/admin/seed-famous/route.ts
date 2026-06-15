@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
   // Importa al pool global con géneros y fija el año curado como 'manual'.
   try {
     const tracks = paired.map((p) => p.track);
-    await enrichWithGenres(token, tracks);
+    await enrichWithGenres(tracks);
     await importTracks(supabase, tracks);
 
     let yearsSet = 0;
