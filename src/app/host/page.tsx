@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { isHostAuthenticated } from "@/lib/spotify/auth";
+import CreateGameButton from "@/components/CreateGameButton";
 
 const ERRORS: Record<string, string> = {
   oauth_state: "Falló la validación de seguridad del login. Probá de nuevo.",
@@ -34,15 +35,15 @@ export default async function HostPage({
           <p className="rounded-md bg-green-100 px-4 py-2 text-sm text-green-700">
             Sesión de Spotify activa.
           </p>
-          <Link
-            href="/board"
-            className="rounded-full bg-black px-6 py-3 font-semibold text-white hover:bg-gray-800"
-          >
-            Ir al board
-          </Link>
-          <a href="/api/auth/logout" className="text-xs text-gray-400 underline">
-            Cerrar sesión de Spotify
-          </a>
+          <CreateGameButton />
+          <div className="mt-2 flex flex-col items-center gap-1">
+            <Link href="/board/test" className="text-xs text-gray-400 underline">
+              Probar audio (board de prueba)
+            </Link>
+            <a href="/api/auth/logout" className="text-xs text-gray-400 underline">
+              Cerrar sesión de Spotify
+            </a>
+          </div>
         </div>
       ) : (
         <a

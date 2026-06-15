@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const res = NextResponse.redirect(new URL("/board", origin));
+    const res = NextResponse.redirect(new URL("/host", origin));
     await exchangeCodeForTokens(res, code, verifier);
     clearPkceCookies(res);
     return res;
