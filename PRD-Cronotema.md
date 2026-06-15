@@ -385,6 +385,19 @@ Tres opciones según cuánto quieras invertir; recomendada la **A** para el MVP:
   lo ubicaron. El salteado no reaparece en esa partida (`ct_games.skipped_card_ids`).
 - **Revancha / Nueva partida** desde el board al terminar (revancha = mismos equipos, vuelve
   al lobby; nueva = crea otra sala).
+- **Flujo de ronda player-driven** (menos host, anti-cuelgue por timers). Fases:
+  `playing → challenge → closing → reveal → resolved`.
+  - En `challenge`, los equipos sin turno tocan **"Desafiar"** o **"NO desafío"**. Si todos
+    declinan, o vence el **timer de desafío** (config, default 30s), se cierra la ventana.
+  - En `closing`, el **jugador en turno** tiene **"Finalizar ronda"** (le da tiempo a decir
+    título/artista). Si no lo toca, lo cierra el **timer de cierre** (config, default 20s).
+  - El cierre lo dispara el player o el timer (no requiere al host). El host queda con lo
+    mínimo: reproducir y, en el reveal, **"Adivinó (+🪙)"** / **"No adivinó"** (que también
+    avanza). Botón **"Forzar fin de ronda"** en el host como red de seguridad.
+  - Timers sincronizados entre clientes vía `ct_rounds.phase_started_at` + el timer de la
+    fase. "NO desafío" persistido en `ct_rounds.declined_team_ids` (migración 0005).
+- **Reingreso por el QR**: si la partida ya empezó, `/join` muestra la lista de equipos para
+  volver a SU equipo (sin crear uno nuevo). En lobby, crea equipo con nombre.
 
 **UI / operación**
 - **Mobile-first** con identidad de marca (paleta del ícono). Player: **una línea de tiempo
@@ -400,7 +413,7 @@ Tres opciones según cuánto quieras invertir; recomendada la **A** para el MVP:
 - **Seed de 50 famosas** con **años curados** (`year_status = manual`), porque MusicBrainz por
   ISRC volvía vacío con los remasters que devuelve Spotify. El flujo MB sigue para imports.
 - Migraciones: `0001` base · `0002` estado de ronda (+ votos, sin uso) · `0003` `played` ·
-  `0004` `skipped_card_ids`.
+  `0004` `skipped_card_ids` · `0005` `declined_team_ids` + `phase_started_at`.
 
 **Arquitectura**
 - Estado autoritativo en Postgres (`src/lib/game/state.ts` + `server.ts`); Realtime solo avisa

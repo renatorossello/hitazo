@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { isHostAuthenticated } from "@/lib/spotify/auth";
 import { pickUnusedCards } from "@/lib/game/deck";
+import { phaseUpdate } from "@/lib/game/server";
 
 /**
  * POST /api/games/:roomCode/start  (host-only)
@@ -13,7 +14,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
     return NextResponse.json({ error: "no_host_session" }, { status: 401 });
   }
   const { roomCode } = await params;
-  const body = (await req.json().catch(() => ({}))) as { targetCards?: number };
+  const body = (await req.json().catch(() => ({}))) as {
+    targetCards?: number;
+    challengeWindowSec?: number;
+    closeTurnSec?: number;
+  };
   const supabase = createServiceClient();
 
   const { data: game } = await supabase
@@ -63,17 +68,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
     turn_index: 0,
     team_id: teams[0].id, // turno 0 = menor join_order
     card_id: first.id,
-    phase: "playing",
+    ...phaseUpdate("playing"),
   });
   if (roundErr) return NextResponse.json({ error: roundErr.message }, { status: 500 });
 
-  // targetCards configurable (cae al default del config existente si no viene/ inválido).
+  // Config configurable desde el lobby (cae al default si no viene / es inválido).
   const existingConfig = (game.config as Record<string, unknown>) ?? {};
-  const target = Number(body.targetCards);
-  const config =
-    Number.isInteger(target) && target >= 3 && target <= 30
-      ? { ...existingConfig, targetCards: target }
-      : existingConfig;
+  const config = { ...existingConfig };
+  const setInt = (key: string, v: unknown, min: number, max: number) => {
+    const n = Number(v);
+    if (Number.isInteger(n) && n >= min && n <= max) config[key] = n;
+  };
+  setInt("targetCards", body.targetCards, 3, 30);
+  setInt("challengeWindowSec", body.challengeWindowSec, 5, 120);
+  setInt("closeTurnSec", body.closeTurnSec, 5, 120);
 
   const { error: gameErr } = await supabase
     .from("ct_games")

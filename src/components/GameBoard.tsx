@@ -32,7 +32,6 @@ export default function GameBoard({
   const cfgRef = useRef(state.config);
   const firedRef = useRef("");
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
-  const [metaGuessed, setMetaGuessed] = useState(false);
   const [origin, setOrigin] = useState("");
   const router = useRouter();
 
@@ -49,59 +48,44 @@ export default function GameBoard({
 
   const roundId = round?.id;
   const phase = round?.phase;
-  const challengerId = round?.challengerId ?? null;
-  const challengePos = round?.challengePosition ?? null;
+  const phaseStartedAt = round?.phaseStartedAt ?? null;
 
-  /* eslint-disable react-hooks/set-state-in-effect -- el effect sincroniza un reloj
-     (countdown) con un sistema externo (setInterval); setState acá es el patrón correcto. */
+  // El board (host) dispara las transiciones por timer, basándose en el deadline del
+  // server (phase_started_at + el timer de la fase): challenge → cierra la ventana;
+  // closing → finaliza el turno. Deadline estable (no se reinicia en cada refetch).
+  /* eslint-disable react-hooks/set-state-in-effect -- el effect sincroniza un reloj externo */
   useEffect(() => {
-    if (!isHost || !roundId || state.status !== "playing") {
+    if (!isHost || !roundId || state.status !== "playing" || !phaseStartedAt) {
       setSecondsLeft(null);
       return;
     }
-    const key = `${roundId}:${phase}:${challengerId ?? ""}:${challengePos ?? ""}`;
-    const fire = (a: string) => {
-      if (firedRef.current !== key) {
-        firedRef.current = key;
-        actRef.current(a);
-      }
-    };
-
-    // Si el desafiante ya ubicó, revelamos enseguida (no esperamos al timer).
-    if (phase === "challenge" && challengePos != null) {
-      setSecondsLeft(null);
-      fire("reveal");
-      return;
-    }
-
-    // Ventana / timer. Si alguien ya reclamó el desafío, el countdown se reinicia
-    // (deps incluyen challengerId) para darle tiempo a ubicar antes del reveal.
     let limit: number | null = null;
     let action: string | null = null;
-    if (phase === "playing" && cfgRef.current.turnTimerSec) {
-      limit = cfgRef.current.turnTimerSec;
-      action = "timeout";
-    } else if (phase === "challenge") {
+    if (phase === "challenge") {
       limit = cfgRef.current.challengeWindowSec;
-      action = "reveal";
+      action = "challenge/close";
+    } else if (phase === "closing") {
+      limit = cfgRef.current.closeTurnSec;
+      action = "finalize";
     }
-    if (limit == null) {
+    if (limit == null || !action) {
       setSecondsLeft(null);
       return;
     }
-
-    let left = limit;
-    setSecondsLeft(left);
-    const id = setInterval(() => {
-      left -= 1;
+    const deadline = Date.parse(phaseStartedAt) + limit * 1000;
+    const key = `${roundId}:${phase}`;
+    const tick = () => {
+      const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
       setSecondsLeft(left);
-      if (left <= 0) {
-        clearInterval(id);
-        if (action) fire(action);
+      if (left <= 0 && firedRef.current !== key) {
+        firedRef.current = key;
+        actRef.current(action!);
       }
-    }, 1000);
+    };
+    tick();
+    const id = setInterval(tick, 500);
     return () => clearInterval(id);
-  }, [roundId, phase, isHost, challengerId, challengePos, state.status]);
+  }, [roundId, phase, phaseStartedAt, isHost, state.status]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   async function playCard() {
@@ -110,10 +94,9 @@ export default function GameBoard({
     act("play"); // marca que ya suena → el turno ve el selector recién ahora
   }
 
-  async function resolveRound() {
+  async function resolveWith(metaAwarded: boolean) {
     await player.pause(); // frena la canción si seguía sonando
-    await act("resolve", { metaAwarded: metaGuessed });
-    setMetaGuessed(false);
+    await act("resolve", { metaAwarded });
   }
 
   async function newGame() {
@@ -229,12 +212,12 @@ export default function GameBoard({
               >
                 Replay
               </button>
-              {round?.phase === "challenge" && (
+              {(round?.phase === "challenge" || round?.phase === "closing") && (
                 <button
-                  onClick={() => act("reveal")}
+                  onClick={() => act("finalize")}
                   className="rounded-full bg-accent px-5 py-2.5 text-sm font-bold text-brand-deep"
                 >
-                  Revelar ahora
+                  ⏩ Forzar fin de ronda
                 </button>
               )}
               {round?.phase === "playing" && (
@@ -282,22 +265,24 @@ export default function GameBoard({
             )}
           </p>
           {isHost && (
-            <div className="flex flex-col items-center gap-3">
-              <label className="flex cursor-pointer items-center gap-2 rounded-xl bg-white/10 px-4 py-2.5 text-sm">
-                <input
-                  type="checkbox"
-                  checked={metaGuessed}
-                  onChange={(e) => setMetaGuessed(e.target.checked)}
-                  className="h-4 w-4"
-                />
-                {turnTeam?.name} adivinó <strong>título y artista</strong> (+🪙)
-              </label>
-              <button
-                onClick={resolveRound}
-                className="rounded-full bg-accent px-10 py-3 text-lg font-bold text-brand-deep transition active:scale-95"
-              >
-                Continuar →
-              </button>
+            <div className="flex flex-col items-center gap-2">
+              <p className="text-sm text-violet-200">
+                ¿{turnTeam?.name} adivinó <strong>título y artista</strong>?
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => resolveWith(true)}
+                  className="rounded-full bg-teal px-7 py-3 text-lg font-bold text-white transition active:scale-95"
+                >
+                  Adivinó (+🪙) →
+                </button>
+                <button
+                  onClick={() => resolveWith(false)}
+                  className="rounded-full bg-white/15 px-7 py-3 text-lg font-bold text-white transition hover:bg-white/25 active:scale-95"
+                >
+                  No adivinó →
+                </button>
+              </div>
             </div>
           )}
         </div>

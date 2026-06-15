@@ -35,8 +35,10 @@ export type StateRound = {
   id: string;
   turnIndex: number;
   teamId: string | null;
-  phase: string; // playing | challenge | reveal | resolved
+  phase: string; // playing | challenge | closing | reveal | resolved
   played: boolean; // la carta ya empezó a sonar
+  phaseStartedAt: string | null; // ISO; para countdowns sincronizados
+  declinedTeamIds: string[]; // equipos sin turno que tocaron "NO desafío"
   cardUri: string | null; // solo para el host
   guessedMeta: boolean;
   placedPosition: number | null;
@@ -52,6 +54,7 @@ export type StateRound = {
 export type GameConfig = {
   turnTimerSec: number | null;
   challengeWindowSec: number;
+  closeTurnSec: number;
   targetCards: number;
 };
 
@@ -67,7 +70,12 @@ export type GameState = {
   winnerTeamId: string | null;
 };
 
-const DEFAULT_CONFIG: GameConfig = { turnTimerSec: 60, challengeWindowSec: 15, targetCards: 10 };
+const DEFAULT_CONFIG: GameConfig = {
+  turnTimerSec: null,
+  challengeWindowSec: 30,
+  closeTurnSec: 20,
+  targetCards: 10,
+};
 
 type EmbeddedCard = {
   title: string;
@@ -134,7 +142,7 @@ export async function loadGameState(
     const { data: r } = await supabase
       .from("ct_rounds")
       .select(
-        "id, turn_index, team_id, phase, played, guessed_meta, placed_position, placed_correct, challenger_id, challenge_position, challenge_correct, card_winner_id, meta_awarded, ct_cards(title, artist, cover_url, release_year, spotify_uri)"
+        "id, turn_index, team_id, phase, played, phase_started_at, declined_team_ids, guessed_meta, placed_position, placed_correct, challenger_id, challenge_position, challenge_correct, card_winner_id, meta_awarded, ct_cards(title, artist, cover_url, release_year, spotify_uri)"
       )
       .eq("game_id", game.id)
       .eq("turn_index", game.current_turn)
@@ -150,6 +158,8 @@ export async function loadGameState(
         teamId: (r.team_id as string) ?? null,
         phase: r.phase as string,
         played: Boolean(r.played),
+        phaseStartedAt: (r.phase_started_at as string) ?? null,
+        declinedTeamIds: (r.declined_team_ids as string[] | null) ?? [],
         cardUri: opts.includeCardUri ? (card?.spotify_uri ?? null) : null,
         guessedMeta: Boolean(r.guessed_meta),
         placedPosition: (r.placed_position as number) ?? null,

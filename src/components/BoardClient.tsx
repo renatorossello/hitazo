@@ -55,14 +55,14 @@ export default function BoardClient({ roomCode, isHost }: { roomCode: string; is
     };
   }, [roomCode, refetch]);
 
-  const startGame = useCallback(async (targetCards: number) => {
+  const startGame = useCallback(async (cfg: { targetCards: number; challengeWindowSec: number; closeTurnSec: number }) => {
     setStarting(true);
     setStartError(null);
     try {
       const res = await fetch(`/api/games/${roomCode}/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetCards }),
+        body: JSON.stringify(cfg),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {

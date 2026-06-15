@@ -3,9 +3,14 @@ import { isHostAuthenticated } from "@/lib/spotify/auth";
 import { createServiceClient } from "@/lib/supabase/server";
 import { generateRoomCode } from "@/lib/game/room-code";
 
-// Config por defecto de la partida (sección 4 del PRD). turnTimerSec null = sin
-// límite de turno (el timer es opcional; lo hacemos configurable en el pulido).
-const DEFAULT_CONFIG = { turnTimerSec: null, challengeWindowSec: 15, targetCards: 10 };
+// Config por defecto de la partida. turnTimerSec null = sin límite para ubicar.
+// challengeWindowSec = ventana de desafío; closeTurnSec = ventana para cerrar el turno.
+const DEFAULT_CONFIG = {
+  turnTimerSec: null,
+  challengeWindowSec: 30,
+  closeTurnSec: 20,
+  targetCards: 10,
+};
 
 /**
  * POST /api/games/create

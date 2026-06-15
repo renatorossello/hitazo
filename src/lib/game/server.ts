@@ -11,7 +11,12 @@ export type GameRow = {
   id: string;
   status: string;
   current_turn: number;
-  config: { turnTimerSec: number | null; challengeWindowSec: number; targetCards: number };
+  config: {
+    turnTimerSec: number | null;
+    challengeWindowSec: number;
+    closeTurnSec: number;
+    targetCards: number;
+  };
   filter_ids: string[] | null;
 };
 
@@ -20,6 +25,7 @@ export type RoundRow = {
   turn_index: number;
   team_id: string | null;
   phase: string;
+  declined_team_ids: string[];
   guessed_meta: boolean;
   placed_position: number | null;
   placed_correct: boolean | null;
@@ -32,7 +38,12 @@ export type RoundRow = {
   card_year: number;
 };
 
-const DEFAULT_CONFIG = { turnTimerSec: 60, challengeWindowSec: 15, targetCards: 10 };
+const DEFAULT_CONFIG = { turnTimerSec: null, challengeWindowSec: 30, closeTurnSec: 20, targetCards: 10 };
+
+/** Update de fase + timestamp para que arranque el countdown de esa fase. */
+export function phaseUpdate(phase: string): { phase: string; phase_started_at: string } {
+  return { phase, phase_started_at: new Date().toISOString() };
+}
 
 export async function getGameByRoom(supabase: SupabaseClient, roomCode: string): Promise<GameRow | null> {
   const { data } = await supabase
@@ -55,7 +66,7 @@ export async function getCurrentRound(supabase: SupabaseClient, game: GameRow): 
   const { data } = await supabase
     .from("ct_rounds")
     .select(
-      "id, turn_index, team_id, phase, guessed_meta, placed_position, placed_correct, challenger_id, challenge_position, challenge_correct, card_winner_id, meta_awarded, card_id, ct_cards(release_year)"
+      "id, turn_index, team_id, phase, declined_team_ids, guessed_meta, placed_position, placed_correct, challenger_id, challenge_position, challenge_correct, card_winner_id, meta_awarded, card_id, ct_cards(release_year)"
     )
     .eq("game_id", game.id)
     .eq("turn_index", game.current_turn)
@@ -67,6 +78,7 @@ export async function getCurrentRound(supabase: SupabaseClient, game: GameRow): 
     turn_index: data.turn_index,
     team_id: data.team_id,
     phase: data.phase,
+    declined_team_ids: (data.declined_team_ids as string[] | null) ?? [],
     guessed_meta: Boolean(data.guessed_meta),
     placed_position: data.placed_position,
     placed_correct: data.placed_correct,
@@ -170,7 +182,7 @@ export async function advanceOrFinish(supabase: SupabaseClient, game: GameRow): 
     turn_index: nextTurn,
     team_id: nextTeam.id,
     card_id: card.id,
-    phase: "playing",
+    ...phaseUpdate("playing"),
   });
   await supabase.from("ct_games").update({ current_turn: nextTurn }).eq("id", game.id);
 }

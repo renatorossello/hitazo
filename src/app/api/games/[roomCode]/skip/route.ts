@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { isHostAuthenticated } from "@/lib/spotify/auth";
-import { getGameByRoom, getCurrentRound } from "@/lib/game/server";
+import { getGameByRoom, getCurrentRound, phaseUpdate } from "@/lib/game/server";
 import { pickUnusedCards } from "@/lib/game/deck";
 
 /**
@@ -42,7 +42,10 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ ro
     return NextResponse.json({ error: "no_more_cards" }, { status: 400 });
   }
 
-  await supabase.from("ct_rounds").update({ card_id: card.id, played: false }).eq("id", round.id);
+  await supabase
+    .from("ct_rounds")
+    .update({ card_id: card.id, played: false, ...phaseUpdate("playing") })
+    .eq("id", round.id);
 
   return NextResponse.json({ ok: true });
 }

@@ -1,21 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { isHostAuthenticated } from "@/lib/spotify/auth";
-import { getGameByRoom, getCurrentRound, getTeamYears } from "@/lib/game/server";
+import { getGameByRoom, getCurrentRound, getTeamYears, phaseUpdate } from "@/lib/game/server";
 import { isPlacementCorrect } from "@/lib/game/rules";
 
 /**
- * POST /api/games/:roomCode/reveal  (host/board)
- * Cierra la ventana de desafío: calcula si el turno (y el desafiante, si ubicó)
- * acertaron, y pasa a fase 'reveal' (recién acá se exponen año/título/artista).
+ * POST /api/games/:roomCode/finalize  { teamId? }
+ * Cierra el turno y pasa a reveal (calcula aciertos; recién acá se expone año/título).
+ * La dispara: el jugador EN TURNO ("Finalizar ronda", solo en 'closing'), el timer de
+ * cierre del board, o el host ("Forzar fin de ronda", desde 'challenge' o 'closing').
  */
-export async function POST(_req: NextRequest, { params }: { params: Promise<{ roomCode: string }> }) {
-  if (!(await isHostAuthenticated())) {
-    return NextResponse.json({ error: "no_host_session" }, { status: 401 });
-  }
+export async function POST(req: NextRequest, { params }: { params: Promise<{ roomCode: string }> }) {
   const { roomCode } = await params;
-  const supabase = createServiceClient();
+  const body = (await req.json().catch(() => ({}))) as { teamId?: string };
 
+  const supabase = createServiceClient();
   const game = await getGameByRoom(supabase, roomCode);
   if (!game || game.status !== "playing") {
     return NextResponse.json({ error: "game_not_playing" }, { status: 409 });
@@ -25,30 +24,35 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ ro
   if (round.phase === "reveal" || round.phase === "resolved") {
     return NextResponse.json({ ok: true }); // idempotente
   }
-  if (round.phase !== "challenge") {
+  if (round.phase !== "challenge" && round.phase !== "closing") {
     return NextResponse.json({ error: "wrong_phase" }, { status: 409 });
   }
 
-  // Correctitud del turno (su línea NO incluye aún la carta en juego).
+  // Autorización: el host siempre (timer/forzar); el jugador en turno solo en 'closing'.
+  const isHost = await isHostAuthenticated();
+  const isTurnPlayer = Boolean(body.teamId) && body.teamId === round.team_id;
+  if (!isHost && !(isTurnPlayer && round.phase === "closing")) {
+    return NextResponse.json({ error: "not_allowed" }, { status: 403 });
+  }
+
+  // Correctitud sobre la línea del equipo EN TURNO.
   const turnYears = await getTeamYears(supabase, round.team_id!);
   const placedCorrect =
     round.placed_position != null
       ? isPlacementCorrect(turnYears, round.placed_position, round.card_year)
       : false;
 
-  // Correctitud del desafiante: su propuesta es un hueco en la MISMA línea (la del
-  // equipo en turno), por eso se evalúa contra turnYears.
   let challengeCorrect: boolean | null = null;
   if (round.challenger_id) {
     challengeCorrect =
       round.challenge_position != null
         ? isPlacementCorrect(turnYears, round.challenge_position, round.card_year)
-        : false; // reclamó pero no ubicó a tiempo
+        : false;
   }
 
   const { error } = await supabase
     .from("ct_rounds")
-    .update({ placed_correct: placedCorrect, challenge_correct: challengeCorrect, phase: "reveal" })
+    .update({ placed_correct: placedCorrect, challenge_correct: challengeCorrect, ...phaseUpdate("reveal") })
     .eq("id", round.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

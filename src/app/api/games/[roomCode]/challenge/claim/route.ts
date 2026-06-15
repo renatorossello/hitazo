@@ -25,6 +25,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
   if (!teamId || teamId === round.team_id) {
     return NextResponse.json({ error: "cannot_challenge_own_turn" }, { status: 403 });
   }
+  if (round.declined_team_ids.includes(teamId)) {
+    return NextResponse.json({ error: "already_declined" }, { status: 409 });
+  }
 
   // El equipo debe existir en la partida y tener al menos 1 ficha.
   const { data: team } = await supabase

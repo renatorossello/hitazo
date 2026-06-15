@@ -5,8 +5,11 @@ import { QRCodeSVG } from "qrcode.react";
 import Logo from "./Logo";
 
 export type LobbyTeam = { teamId: string; name: string; joinOrder: number; connected: boolean };
+export type StartConfig = { targetCards: number; challengeWindowSec: number; closeTurnSec: number };
 
 const TARGET_OPTIONS = [5, 7, 10, 12, 15];
+const CHALLENGE_OPTIONS = [15, 20, 30, 45, 60];
+const CLOSE_OPTIONS = [10, 15, 20, 30, 45];
 
 /**
  * Lobby (presentacional). La suscripción/presencia las maneja BoardClient. Se muestra
@@ -23,12 +26,14 @@ export default function Lobby({
   roomCode: string;
   teams: LobbyTeam[];
   isHost: boolean;
-  onStart: (targetCards: number) => void;
+  onStart: (cfg: StartConfig) => void;
   starting: boolean;
   startError: string | null;
 }) {
   const [joinUrl, setJoinUrl] = useState<string | null>(null);
   const [target, setTarget] = useState(10);
+  const [challengeSec, setChallengeSec] = useState(30);
+  const [closeSec, setCloseSec] = useState(20);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- valor client-only (window.location)
@@ -88,22 +93,52 @@ export default function Lobby({
 
       {isHost && (
         <div className="flex flex-col items-center gap-3">
-          <label className="flex items-center gap-2 text-sm text-violet-200">
-            Cartas para ganar:
-            <select
-              value={target}
-              onChange={(e) => setTarget(Number(e.target.value))}
-              className="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-white outline-none"
-            >
-              {TARGET_OPTIONS.map((n) => (
-                <option key={n} value={n} className="text-black">
-                  {n}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm text-violet-200">
+            <label className="flex items-center gap-2">
+              Cartas para ganar:
+              <select
+                value={target}
+                onChange={(e) => setTarget(Number(e.target.value))}
+                className="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-white outline-none"
+              >
+                {TARGET_OPTIONS.map((n) => (
+                  <option key={n} value={n} className="text-black">
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-2">
+              Desafío (s):
+              <select
+                value={challengeSec}
+                onChange={(e) => setChallengeSec(Number(e.target.value))}
+                className="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-white outline-none"
+              >
+                {CHALLENGE_OPTIONS.map((n) => (
+                  <option key={n} value={n} className="text-black">
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-2">
+              Cierre turno (s):
+              <select
+                value={closeSec}
+                onChange={(e) => setCloseSec(Number(e.target.value))}
+                className="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-white outline-none"
+              >
+                {CLOSE_OPTIONS.map((n) => (
+                  <option key={n} value={n} className="text-black">
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           <button
-            onClick={() => onStart(target)}
+            onClick={() => onStart({ targetCards: target, challengeWindowSec: challengeSec, closeTurnSec: closeSec })}
             disabled={starting || teams.length < 2}
             className="rounded-2xl bg-accent px-10 py-4 text-lg font-bold text-brand-deep shadow-lg transition hover:brightness-105 active:scale-[0.98] disabled:opacity-40"
           >

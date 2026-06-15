@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import TeamTimelineTabs, { useActiveTab } from "./TeamTimelineTabs";
+import { useCountdown } from "./useCountdown";
 import type { VMarker } from "./VerticalTimeline";
 import type { GameState } from "@/lib/game/state";
 import type { StoredPlayer } from "@/lib/game/player";
@@ -25,6 +26,14 @@ export default function PlayerGame({
   const [activeTab, setActiveTab] = useActiveTab(state);
 
   const round = state.round;
+  // Countdown sincronizado de la fase activa (desafío / cierre de turno).
+  const timerLimit =
+    round?.phase === "challenge"
+      ? state.config.challengeWindowSec
+      : round?.phase === "closing"
+        ? state.config.closeTurnSec
+        : null;
+  const secondsLeft = useCountdown(round?.phaseStartedAt, timerLimit);
   const teamName = (id: string | null) => state.teams.find((t) => t.id === id)?.name ?? "…";
 
   if (!round) return <p className="mt-8 text-sm text-gray-400">Esperando…</p>;
@@ -59,6 +68,7 @@ export default function PlayerGame({
   }
 
   // ---- Banner + acción ----
+  const clock = secondsLeft != null ? ` · ${secondsLeft}s` : "";
   let banner: ReactNode = null;
   let confirm: ReactNode = null;
 
@@ -67,23 +77,49 @@ export default function PlayerGame({
     else if (isMyTurn) banner = pill("¡Tu turno! Tocá un hueco para ubicar el tema ↓", "turn");
     else banner = pill(<>🎶 Turno de <strong>{teamName(round.teamId)}</strong>. Escuchá.</>, "wait");
   } else if (round.phase === "challenge") {
-    if (isMyTurn) banner = pill("Ubicaste. Ventana de desafío abierta… ⏳", "wait");
+    const iDeclined = round.declinedTeamIds.includes(myId);
+    if (isMyTurn) banner = pill(<>Ubicaste. Ventana de desafío…{clock}</>, "wait");
     else if (isChallenger && round.challengePosition == null)
       banner = pill(<>Desafiás a <strong>{teamName(round.teamId)}</strong>: elegí OTRO hueco ↓</>, "accent");
-    else if (isChallenger) banner = pill("Desafío enviado. Esperando el reveal… ⏳", "wait");
+    else if (isChallenger) banner = pill("Desafío enviado. Esperando… ⏳", "wait");
     else if (round.challengerId) banner = pill(<>Desafía <strong>{teamName(round.challengerId)}</strong>.</>, "wait");
+    else if (iDeclined) banner = pill("Declinaste el desafío. Esperando…", "wait");
     else if ((state.teams.find((t) => t.id === myId)?.tokens ?? 0) < 1) banner = pill("Sin fichas para desafiar.", "wait");
     else {
-      banner = pill(<>Turno de <strong>{teamName(round.teamId)}</strong> · podés desafiar.</>, "wait");
+      banner = pill(<>Turno de <strong>{teamName(round.teamId)}</strong> · ¿desafiás?{clock}</>, "wait");
+      confirm = (
+        <div className="flex gap-2">
+          <button
+            disabled={busy}
+            onClick={() => submit("challenge/claim")}
+            className="flex-1 rounded-2xl bg-accent px-4 py-4 text-base font-bold text-brand-deep shadow-md transition active:scale-[0.98] disabled:opacity-40"
+          >
+            ⚡ Desafiar (−1 🪙)
+          </button>
+          <button
+            disabled={busy}
+            onClick={() => submit("decline")}
+            className="flex-1 rounded-2xl bg-white px-4 py-4 text-base font-bold text-gray-600 ring-1 ring-gray-200 transition active:scale-[0.98] disabled:opacity-40"
+          >
+            NO desafío
+          </button>
+        </div>
+      );
+    }
+  } else if (round.phase === "closing") {
+    if (isMyTurn) {
+      banner = pill("Cerrá el turno cuando quieras. Si querés, decí título y artista en voz alta 🎤", "turn");
       confirm = (
         <button
           disabled={busy}
-          onClick={() => submit("challenge/claim")}
-          className="w-full rounded-2xl bg-accent px-6 py-4 text-lg font-bold text-brand-deep shadow-md transition active:scale-[0.98] disabled:opacity-40"
+          onClick={() => submit("finalize")}
+          className="w-full rounded-2xl bg-brand px-6 py-4 text-lg font-bold text-white shadow-md transition active:scale-[0.98] disabled:opacity-40"
         >
-          ⚡ Desafiar (−1 🪙)
+          Finalizar ronda{clock}
         </button>
       );
+    } else {
+      banner = pill("Esperando que el turno cierre… ⏳", "wait");
     }
   } else if (round.phase === "reveal") {
     const r = round.reveal;

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { getGameByRoom, getCurrentRound, getTeamYears } from "@/lib/game/server";
+import { getGameByRoom, getCurrentRound, getTeamYears, phaseUpdate } from "@/lib/game/server";
 
 /**
  * POST /api/games/:roomCode/challenge/place  { teamId, position }
@@ -35,9 +35,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
     return NextResponse.json({ error: "same_as_turn" }, { status: 400 });
   }
 
+  // El desafío quedó listo → se cierra la ventana y arranca el cierre de turno.
   const { error } = await supabase
     .from("ct_rounds")
-    .update({ challenge_position: position })
+    .update({ challenge_position: position, ...phaseUpdate("closing") })
     .eq("id", round.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
