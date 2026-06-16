@@ -12,7 +12,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "no_host_session" }, { status: 401 });
   }
   const { id } = await params;
-  const body = (await req.json().catch(() => ({}))) as { year?: number; region?: string };
+  const body = (await req.json().catch(() => ({}))) as {
+    year?: number;
+    region?: string;
+    buckets?: string[];
+  };
   const supabase = createServiceClient();
 
   try {
@@ -25,6 +29,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
     if (typeof body.region === "string") {
       await supabase.from("ct_cards").update({ region: body.region.trim() || null }).eq("id", id);
+    }
+    if (Array.isArray(body.buckets)) {
+      await supabase.from("ct_cards").update({ genre_buckets: body.buckets }).eq("id", id);
     }
     return NextResponse.json({ ok: true });
   } catch (e) {

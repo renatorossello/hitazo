@@ -175,41 +175,54 @@ export function deriveRegion(genres: string[]): string {
  * por artista alcanza para el bucket) para no spamear Deezer.
  */
 export async function enrichWithGenres(tracks: SpotifyTrack[]): Promise<void> {
-  const cache = new Map<string, string[]>();
   const albumGenreCache = new Map<number, string[]>();
 
   for (const t of tracks) {
-    const firstArtist = t.artist.split(",")[0].trim();
-    const key = firstArtist.toLowerCase();
-    let genres = cache.get(key);
+    let genres: string[] = [];
+    try {
+      const firstArtist = t.artist.split(",")[0].trim();
+      const q = `artist:"${firstArtist}" track:"${t.title}"`;
+      const s = await fetch(`https://api.deezer.com/search?limit=1&q=${encodeURIComponent(q)}`);
+      const sb = await s.json().catch(() => ({}));
+      const hit = sb?.data?.[0];
 
-    if (genres === undefined) {
-      genres = [];
-      try {
-        const q = `artist:"${firstArtist}" track:"${t.title}"`;
-        const s = await fetch(`https://api.deezer.com/search?limit=1&q=${encodeURIComponent(q)}`);
-        const sb = await s.json().catch(() => ({}));
-        const albumId: number | undefined = sb?.data?.[0]?.album?.id;
-        if (albumId) {
-          if (albumGenreCache.has(albumId)) {
-            genres = albumGenreCache.get(albumId)!;
-          } else {
-            const al = await fetch(`https://api.deezer.com/album/${albumId}`);
-            const alb = await al.json().catch(() => ({}));
-            genres = ((alb?.genres?.data ?? []) as { name: string }[]).map((g) => g.name);
-            albumGenreCache.set(albumId, genres);
-          }
+      // Carátula desde Deezer si la carta no tiene (los temas de playlist no traen).
+      if (!t.cover_url && hit?.album?.cover_medium) t.cover_url = hit.album.cover_medium;
+
+      const albumId: number | undefined = hit?.album?.id;
+      if (albumId) {
+        if (albumGenreCache.has(albumId)) {
+          genres = albumGenreCache.get(albumId)!;
+        } else {
+          const al = await fetch(`https://api.deezer.com/album/${albumId}`);
+          const alb = await al.json().catch(() => ({}));
+          genres = ((alb?.genres?.data ?? []) as { name: string }[]).map((g) => g.name);
+          albumGenreCache.set(albumId, genres);
         }
-      } catch {
-        /* sin género si Deezer falla */
       }
-      cache.set(key, genres);
-      await sleep(120); // respetar el rate limit de Deezer
+    } catch {
+      /* sin género/carátula si Deezer falla */
     }
-
     t.genres = genres;
     t.genreBuckets = deriveBuckets(genres);
     t.region = deriveRegion(genres);
+    await sleep(120); // respetar el rate limit de Deezer
+  }
+}
+
+/** Año del álbum según Deezer (otra fuente para validar). */
+export async function getDeezerYear(title: string, artist: string): Promise<number | null> {
+  try {
+    const q = `artist:"${artist}" track:"${title}"`;
+    const s = await fetch(`https://api.deezer.com/search?limit=1&q=${encodeURIComponent(q)}`);
+    const sb = await s.json().catch(() => ({}));
+    const albumId: number | undefined = sb?.data?.[0]?.album?.id;
+    if (!albumId) return null;
+    const al = await fetch(`https://api.deezer.com/album/${albumId}`);
+    const alb = await al.json().catch(() => ({}));
+    return parseYear(alb?.release_date) ?? null;
+  } catch {
+    return null;
   }
 }
 
