@@ -81,6 +81,51 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
+/**
+ * Identidad de CANCIÓN (no de carta) para no repetir el mismo tema en una partida
+ * cuando entra por dos cartas distintas (otra playlist, remaster, otro URI de Spotify).
+ * Normaliza título+artista: saca acentos, paréntesis/corchetes y sufijos con guion
+ * ("- 2013 Remaster", "- Live", "- Mono"), y se queda con el primer artista.
+ */
+export function songKey(card: { title: string; artist: string }): string {
+  const deburr = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+  const base = deburr(card.title);
+  const strippedTitle = base
+    .replace(/\(.*?\)|\[.*?\]/g, " ") // quita "(feat. ...)", "(Radio Edit)", etc.
+    .replace(/\s-\s.*$/, " ") // quita "- Remaster", "- Live", "- Mono", "- ... Version"
+    .replace(/[^a-z0-9]+/g, "");
+  const title = strippedTitle || base.replace(/[^a-z0-9]+/g, ""); // fallback si quedó vacío
+  const artist = deburr(card.artist.split(/[,&]|feat/i)[0]).replace(/[^a-z0-9]+/g, "");
+  return `${title}|${artist}`;
+}
+
+/**
+ * Pool de cartas disponibles para la partida: jugables, menos las ya usadas, y
+ * deduplicado por identidad de canción (una sola carta por tema, descartando las
+ * cuyo tema ya se jugó o ya entró al pool). Es la fuente única para sortear y contar.
+ */
+async function availablePool(
+  supabase: SupabaseClient,
+  gameId: string,
+  filterIds: string[] | null
+): Promise<DeckCard[]> {
+  const playable = await getPlayableCards(supabase, filterIds);
+  const used = await getUsedCardIds(supabase, gameId);
+
+  // Temas ya usados en la partida (por si el "gemelo" entró por otra carta).
+  const seen = new Set<string>(playable.filter((c) => used.has(c.id)).map(songKey));
+
+  const out: DeckCard[] = [];
+  for (const c of playable) {
+    if (used.has(c.id)) continue;
+    const key = songKey(c);
+    if (seen.has(key)) continue; // mismo tema que uno ya jugado o ya elegido
+    seen.add(key);
+    out.push(c);
+  }
+  return out;
+}
+
 /** Devuelve `count` cartas jugables al azar que todavía no se usaron en la partida. */
 export async function pickUnusedCards(
   supabase: SupabaseClient,
@@ -88,9 +133,7 @@ export async function pickUnusedCards(
   filterIds: string[] | null,
   count: number
 ): Promise<DeckCard[]> {
-  const playable = await getPlayableCards(supabase, filterIds);
-  const used = await getUsedCardIds(supabase, gameId);
-  const available = playable.filter((c) => !used.has(c.id));
+  const available = await availablePool(supabase, gameId, filterIds);
   return shuffle(available).slice(0, count);
 }
 
@@ -100,7 +143,5 @@ export async function countAvailable(
   gameId: string,
   filterIds: string[] | null
 ): Promise<number> {
-  const playable = await getPlayableCards(supabase, filterIds);
-  const used = await getUsedCardIds(supabase, gameId);
-  return playable.filter((c) => !used.has(c.id)).length;
+  return (await availablePool(supabase, gameId, filterIds)).length;
 }
