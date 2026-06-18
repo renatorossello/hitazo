@@ -45,3 +45,4 @@ next-env.d.ts
 scripts/years-report.csv
 scripts/years-run.log
 scripts/covers-run.log
+scripts/resolve-run.log
