@@ -60,7 +60,10 @@ export default function AdminPage() {
       const sel: Record<string, boolean> = {};
       for (const t of data.tracks as SpotifyTrack[]) sel[t.spotify_id] = true;
       setSelected(sel);
-      setMsg(`${data.tracks.length} temas en la playlist. Elegí cuáles importar y dale "Importar seleccionadas".`);
+      const capped = data.source === "embed" && data.count >= 100
+        ? " ⚠️ Spotify bloqueó la API y por la página pública solo entran ~100. Si la playlist tiene más, dividila en dos (≤100 c/u) e importá ambas; el juego no repite temas."
+        : "";
+      setMsg(`${data.tracks.length} temas en la playlist (vía ${data.source === "api" ? "API de Spotify" : "página pública"}). Elegí cuáles importar y dale "Importar seleccionadas".${capped}`);
     } finally {
       setBusy(null);
     }
