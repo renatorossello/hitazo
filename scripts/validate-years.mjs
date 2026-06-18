@@ -29,40 +29,41 @@ const parseYear = (d) => {
   return Number.isFinite(y) ? y : null;
 };
 
+// fetch con reintentos: aguanta timeouts/red transitorios (un run largo pega varios).
+async function fetchJson(url, opts = {}, tries = 3) {
+  for (let t = 0; t < tries; t++) {
+    try {
+      const res = await fetch(url, opts);
+      if (res.status === 503 || res.status === 429) { await sleep(2000); continue; }
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      await sleep(2000);
+    }
+  }
+  return null;
+}
+const yearsFrom = (recordings) =>
+  [...new Set((recordings ?? []).map((r) => parseYear(r["first-release-date"])).filter(Boolean))].sort((a, b) => a - b);
+
 async function mbByIsrc(isrc) {
-  try {
-    const url = `https://musicbrainz.org/ws/2/isrc/${encodeURIComponent(isrc)}?inc=recordings&fmt=json`;
-    const res = await fetch(url, { headers: { "User-Agent": UA } });
-    if (res.status === 503) { await sleep(2000); return mbByIsrc(isrc); }
-    if (!res.ok) return [];
-    const data = await res.json();
-    return [...new Set((data.recordings ?? []).map((r) => parseYear(r["first-release-date"])).filter(Boolean))].sort((a, b) => a - b);
-  } catch { return []; }
+  const data = await fetchJson(`https://musicbrainz.org/ws/2/isrc/${encodeURIComponent(isrc)}?inc=recordings&fmt=json`, { headers: { "User-Agent": UA } });
+  return yearsFrom(data?.recordings);
 }
 
 async function mbByTitleArtist(title, artist) {
-  try {
-    const q = `recording:"${title}" AND artist:"${artist}"`;
-    const url = `https://musicbrainz.org/ws/2/recording?query=${encodeURIComponent(q)}&fmt=json&limit=15`;
-    const res = await fetch(url, { headers: { "User-Agent": UA } });
-    if (res.status === 503) { await sleep(2000); return mbByTitleArtist(title, artist); }
-    if (!res.ok) return [];
-    const data = await res.json();
-    return [...new Set((data.recordings ?? []).map((r) => parseYear(r["first-release-date"])).filter(Boolean))].sort((a, b) => a - b);
-  } catch { return []; }
+  const q = `recording:"${title}" AND artist:"${artist}"`;
+  const data = await fetchJson(`https://musicbrainz.org/ws/2/recording?query=${encodeURIComponent(q)}&fmt=json&limit=15`, { headers: { "User-Agent": UA } });
+  return yearsFrom(data?.recordings);
 }
 
 async function deezerYear(title, artist) {
-  try {
-    const q = `artist:"${artist}" track:"${title}"`;
-    const s = await fetch(`https://api.deezer.com/search?limit=1&q=${encodeURIComponent(q)}`);
-    const sb = await s.json().catch(() => ({}));
-    const albumId = sb?.data?.[0]?.album?.id;
-    if (!albumId) return null;
-    const al = await fetch(`https://api.deezer.com/album/${albumId}`);
-    const alb = await al.json().catch(() => ({}));
-    return parseYear(alb?.release_date);
-  } catch { return null; }
+  const q = `artist:"${artist}" track:"${title}"`;
+  const sb = await fetchJson(`https://api.deezer.com/search?limit=1&q=${encodeURIComponent(q)}`);
+  const albumId = sb?.data?.[0]?.album?.id;
+  if (!albumId) return null;
+  const alb = await fetchJson(`https://api.deezer.com/album/${albumId}`);
+  return parseYear(alb?.release_date);
 }
 
 const supabase = createClient(SUPA_URL, SERVICE_KEY, { auth: { persistSession: false } });
