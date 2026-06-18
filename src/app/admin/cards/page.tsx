@@ -20,14 +20,20 @@ const BUCKETS = ["Pop", "Rock", "Metal", "Rap/Hip-hop", "R&B/Soul", "Electrónic
 const REGIONS = ["Anglo", "Latino", "Brasil", "K-pop", "J-pop", "Francés", "Italiano", "Alemán", "Desconocido"];
 const STATUSES = ["resolved", "manual", "pending", "needs_review"];
 
+type Deck = { id: string; name: string };
+
 export default function CardsPage() {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const [bucket, setBucket] = useState("");
   const [region, setRegion] = useState("");
+  const [deck, setDeck] = useState("");
   const [page, setPage] = useState(0);
   const [data, setData] = useState<{ cards: Card[]; total: number; pageSize: number } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [decks, setDecks] = useState<Deck[]>([]);
+  const [sel, setSel] = useState<Record<string, boolean>>({});
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -36,18 +42,54 @@ export default function CardsPage() {
     if (status) params.set("status", status);
     if (bucket) params.set("bucket", bucket);
     if (region) params.set("region", region);
+    if (deck) params.set("deck", deck);
     params.set("page", String(page));
     const res = await fetch(`/api/admin/cards?${params}`);
     if (res.ok) setData(await res.json());
     setLoading(false);
-  }, [q, status, bucket, region, page]);
+  }, [q, status, bucket, region, deck, page]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carga async (setState post-await)
     load();
   }, [load]);
 
+  useEffect(() => {
+    fetch("/api/admin/decks").then((r) => (r.ok ? r.json() : { decks: [] })).then((d) => setDecks(d.decks ?? []));
+  }, []);
+
   const totalPages = data ? Math.ceil(data.total / data.pageSize) : 1;
+  const selectedIds = data ? data.cards.filter((c) => sel[c.id]).map((c) => c.id) : [];
+
+  const toggleSel = (id: string) => setSel((s) => ({ ...s, [id]: !s[id] }));
+  const setAllOnPage = (v: boolean) =>
+    setSel((s) => {
+      const next = { ...s };
+      for (const c of data?.cards ?? []) next[c.id] = v;
+      return next;
+    });
+
+  async function deleteSelected() {
+    if (selectedIds.length === 0) return;
+    if (!confirm(`¿Eliminar ${selectedIds.length} canción(es) del pool? Esta acción no se puede deshacer.`)) return;
+    setDeleting(true);
+    const res = await fetch("/api/admin/cards/bulk-delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: selectedIds }),
+    });
+    const out = await res.json().catch(() => ({}));
+    setDeleting(false);
+    if (!res.ok) {
+      alert(`Error al eliminar: ${out.error ?? res.status}`);
+      return;
+    }
+    if (out.failed?.length) {
+      alert(`Eliminadas ${out.deleted}. ${out.failed.length} no se pudieron borrar (ya se jugaron en alguna partida).`);
+    }
+    setSel({});
+    load();
+  }
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4 p-8">
@@ -56,8 +98,12 @@ export default function CardsPage() {
         <Link href="/admin" className="text-sm text-brand underline">← Admin</Link>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
         <input className="rounded border px-2 py-1 text-sm" placeholder="buscar título/artista" value={q} onChange={(e) => { setQ(e.target.value); setPage(0); }} />
+        <select className="rounded border px-2 py-1 text-sm" value={deck} onChange={(e) => { setDeck(e.target.value); setPage(0); }}>
+          <option value="">todos los mazos</option>
+          {decks.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+        </select>
         <select className="rounded border px-2 py-1 text-sm" value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }}>
           <option value="">todos los estados</option>
           {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -72,10 +118,22 @@ export default function CardsPage() {
         </select>
       </div>
 
-      <p className="text-sm text-gray-500">{data ? `${data.total} canciones` : "…"}{loading && " · cargando"}</p>
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-gray-500">{data ? `${data.total} canciones` : "…"}{loading && " · cargando"}</span>
+        <div className="flex-1" />
+        <button onClick={() => setAllOnPage(true)} className="rounded-full border px-3 py-1 text-xs font-semibold">Seleccionar página</button>
+        <button onClick={() => setAllOnPage(false)} className="rounded-full border px-3 py-1 text-xs font-semibold">Limpiar</button>
+        <button
+          onClick={deleteSelected}
+          disabled={selectedIds.length === 0 || deleting}
+          className="rounded-full bg-red-600 px-4 py-1 text-xs font-semibold text-white disabled:opacity-40"
+        >
+          {deleting ? "Eliminando…" : `🗑 Eliminar seleccionadas (${selectedIds.length})`}
+        </button>
+      </div>
 
       <ul className="flex flex-col gap-1.5">
-        {data?.cards.map((c) => <CardRow key={c.id} card={c} onSaved={load} />)}
+        {data?.cards.map((c) => <CardRow key={c.id} card={c} selected={!!sel[c.id]} onToggle={() => toggleSel(c.id)} onSaved={load} />)}
       </ul>
 
       {data && totalPages > 1 && (
@@ -89,7 +147,7 @@ export default function CardsPage() {
   );
 }
 
-function CardRow({ card, onSaved }: { card: Card; onSaved: () => void }) {
+function CardRow({ card, selected, onToggle, onSaved }: { card: Card; selected: boolean; onToggle: () => void; onSaved: () => void }) {
   const [open, setOpen] = useState(false);
   const [year, setYear] = useState(String(card.release_year ?? ""));
   const [region, setRegion] = useState(card.region ?? "");
@@ -121,6 +179,7 @@ function CardRow({ card, onSaved }: { card: Card; onSaved: () => void }) {
   return (
     <li className="rounded-lg border">
       <div className="flex items-center gap-2 px-2 py-1.5 text-sm">
+        <input type="checkbox" checked={selected} onChange={onToggle} className="shrink-0" />
         {card.cover_url ? (
           // eslint-disable-next-line @next/next/no-img-element -- thumbnail del CDN
           <img src={card.cover_url} alt="" className="h-8 w-8 rounded" />

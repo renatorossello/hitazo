@@ -17,10 +17,22 @@ export async function GET(req: NextRequest) {
   const status = url.searchParams.get("status")?.trim();
   const bucket = url.searchParams.get("bucket")?.trim();
   const region = url.searchParams.get("region")?.trim();
+  const deck = url.searchParams.get("deck")?.trim();
   const missingYear = url.searchParams.get("missingYear") === "1";
   const page = Math.max(0, Number(url.searchParams.get("page") ?? 0));
 
   const supabase = createServiceClient();
+
+  // Filtro por mazo: resolvemos qué cartas pertenecen a ese mazo.
+  let deckCardIds: string[] | null = null;
+  if (deck) {
+    const { data: links } = await supabase.from("ct_card_filters").select("card_id").eq("filter_id", deck);
+    deckCardIds = [...new Set((links ?? []).map((l) => l.card_id))];
+    if (deckCardIds.length === 0) {
+      return NextResponse.json({ cards: [], total: 0, page, pageSize: PAGE_SIZE });
+    }
+  }
+
   let query = supabase
     .from("ct_cards")
     .select(
@@ -30,6 +42,7 @@ export async function GET(req: NextRequest) {
     .order("created_at", { ascending: false })
     .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
 
+  if (deckCardIds) query = query.in("id", deckCardIds);
   if (q) query = query.or(`title.ilike.%${q}%,artist.ilike.%${q}%`);
   if (status) query = query.eq("year_status", status);
   if (bucket) query = query.contains("genre_buckets", [bucket]);

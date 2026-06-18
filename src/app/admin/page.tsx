@@ -140,6 +140,17 @@ export default function AdminPage() {
     }
   }
 
+  async function deleteDeck(id: string, name: string) {
+    if (!confirm(`¿Eliminar el mazo "${name}"? Las canciones quedan en el pool; solo se borra la agrupación.`)) return;
+    const res = await fetch(`/api/admin/decks/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const out = await res.json().catch(() => ({}));
+      return setMsg(`Error al eliminar el mazo: ${out.error ?? res.status}`);
+    }
+    setMsg(`Mazo "${name}" eliminado.`);
+    await loadDecks();
+  }
+
   const allSelected = (val: boolean) => {
     const sel: Record<string, boolean> = {};
     for (const t of results) sel[t.spotify_id] = val;
@@ -328,11 +339,19 @@ export default function AdminPage() {
         ) : (
           <ul className="flex flex-col gap-1 text-sm">
             {decks.map((d) => (
-              <li key={d.id} className="flex items-center justify-between rounded px-2 py-1 hover:bg-gray-50">
-                <span className="font-medium">{d.name}</span>
+              <li key={d.id} className="flex items-center gap-2 rounded px-2 py-1 hover:bg-gray-50">
+                <span className="flex-1 font-medium">{d.name}</span>
                 <span className="text-gray-500">
                   {d.playable} jugables / {d.total} total
                 </span>
+                <button
+                  onClick={() => deleteDeck(d.id, d.name)}
+                  disabled={busy !== null}
+                  className="rounded-full px-2 py-0.5 text-xs text-red-600 hover:bg-red-50 disabled:opacity-40"
+                  title="Eliminar mazo"
+                >
+                  🗑
+                </button>
               </li>
             ))}
           </ul>
