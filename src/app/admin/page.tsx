@@ -178,6 +178,9 @@ export default function AdminPage() {
           <Link href="/admin/cards" className="text-brand underline">
             📋 Canciones
           </Link>
+          <Link href="/admin/distribution" className="text-brand underline">
+            📊 Distribución
+          </Link>
           <Link href="/admin/review" className="text-brand underline">
             🛠 Revisar años
           </Link>
