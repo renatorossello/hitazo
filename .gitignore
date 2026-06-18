@@ -44,3 +44,4 @@ next-env.d.ts
 # Salidas del validador de años (generadas)
 scripts/years-report.csv
 scripts/years-run.log
+scripts/covers-run.log
