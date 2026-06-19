@@ -76,6 +76,13 @@
   </div>
 
   <div class="card">
+    <div class="big">3) Link directo (sin JS, sin countdown) — clave en iPhone</div>
+    <p class="hint">Estos son <code>&lt;a&gt;</code> de verdad: el toque ES la apertura (lo que iOS exige). Tocá, y <strong>apenas abra Spotify, da vuelta el celu</strong>. La pregunta: ¿el tema <strong>arrancó solo</strong>?</p>
+    <a id="linkHttps" href="#" style="display:block"><button class="primary">🔗 Abrir (open.spotify.com) — y dar vuelta</button></a>
+    <a id="linkUri" href="#" style="display:block"><button class="alt">🔗 Abrir (spotify: URI) — y dar vuelta</button></a>
+  </div>
+
+  <div class="card">
     <div class="big">Qué mirar 👀</div>
     <ol>
       <li>¿Abrió la <strong>app</strong> de Spotify (no el navegador)?</li>
@@ -115,6 +122,22 @@
       const id = currentId(); if (!id) return;
       window.location.href = 'spotify:track:' + id;
     }
+    // Mantiene los <a> directos apuntando al tema elegido (gesto puro para iOS).
+    function syncLinks() {
+      const sel = document.getElementById('track').value;
+      let id = sel;
+      if (sel === '__custom__') {
+        const raw = document.getElementById('custom').value.trim();
+        const m = raw.match(/track[/:]([a-zA-Z0-9]{22})/);
+        id = m ? m[1] : (/^[a-zA-Z0-9]{22}$/.test(raw) ? raw : '');
+      }
+      document.getElementById('linkHttps').href = id ? 'https://open.spotify.com/track/' + id : '#';
+      document.getElementById('linkUri').href = id ? 'spotify:track:' + id : '#';
+    }
+    document.getElementById('track').addEventListener('change', syncLinks);
+    document.getElementById('custom').addEventListener('input', syncLinks);
+    syncLinks();
+
     function runFlow() {
       const id = currentId(); if (!id) return;
       const ov = document.getElementById('overlay');
