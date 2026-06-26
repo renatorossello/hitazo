@@ -24,6 +24,15 @@ export default function VerticalTimeline({
   onSelect?: (position: number) => void;
   disabledPosition?: number | null;
 }) {
+  // Rango de años del hueco i (orientación: más viejo arriba → más nuevo abajo).
+  // Hace explícito qué año va en cada hueco para que nadie dude si "abajo" es mayor o menor.
+  const gapRange = (i: number): string => {
+    if (cards.length === 0) return "ubicar acá";
+    if (i === 0) return `↑ más viejo que ${cards[0].year}`;
+    if (i === cards.length) return `más nuevo que ${cards[cards.length - 1].year} ↓`;
+    return `entre ${cards[i - 1].year} y ${cards[i].year}`;
+  };
+
   const gap = (i: number) => {
     const here = markers.filter((m) => m.position === i);
     const isDisabled = disabledPosition === i;
@@ -44,13 +53,13 @@ export default function VerticalTimeline({
         <button
           key={`g${i}`}
           onClick={() => onSelect?.(i)}
-          className={`w-full rounded-lg border-2 border-dashed py-2.5 text-center text-sm transition active:scale-[0.99] ${
+          className={`w-full rounded-lg border-2 border-dashed py-2.5 text-center text-sm font-medium transition active:scale-[0.99] ${
             isSelected
               ? "border-teal bg-teal/15 font-bold text-teal"
-              : "border-gray-300 text-gray-400 hover:border-brand hover:bg-brand/5"
+              : "border-gray-300 text-gray-500 hover:border-brand hover:bg-brand/5"
           }`}
         >
-          {isSelected ? "✓ acá" : "＋ ubicar acá"}
+          {isSelected ? `✓ acá · ${gapRange(i)}` : `＋ ${gapRange(i)}`}
         </button>
       );
     }
@@ -76,6 +85,9 @@ export default function VerticalTimeline({
   return (
     <div className="flex w-full flex-col gap-1.5">
       {cards.length === 0 && <p className="py-4 text-center text-xs text-gray-400">Sin cartas todavía.</p>}
+      {cards.length > 0 && (
+        <p className="text-center text-[11px] font-semibold uppercase tracking-wide text-gray-400">↑ más viejas · más nuevas ↓</p>
+      )}
       {gap(0)}
       {cards.map((c, i) => (
         <div key={`c${i}`} className="flex flex-col gap-1.5">
