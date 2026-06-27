@@ -18,29 +18,40 @@ export async function getPlayableCards(
   supabase: SupabaseClient,
   filterIds: string[] | null
 ): Promise<DeckCard[]> {
-  // Si hay filtros, primero resolvemos qué card_ids pertenecen a esos mazos.
-  let restrictIds: string[] | null = null;
-  if (filterIds && filterIds.length > 0) {
-    const { data: links } = await supabase
-      .from("ct_card_filters")
-      .select("card_id")
-      .in("filter_id", filterIds);
-    // Dedup: una carta en varias playlists elegidas entra UNA sola vez al mazo.
-    restrictIds = [...new Set((links ?? []).map((l) => l.card_id))];
-    if (restrictIds.length === 0) return [];
-  }
+  const hasFilter = Array.isArray(filterIds) && filterIds.length > 0;
 
+  // Filtramos por los filter_id (pocos) vía inner join, NO por una lista de ~100
+  // card_id: eso armaba un .in("id", [100 uuids]) con una URL gigante que en prod
+  // hacía fallar el fetch a Supabase ("fetch failed") con mazos grandes.
+  const cols = "id, release_year, spotify_uri, title, artist, cover_url";
   let query = supabase
     .from("ct_cards")
-    .select("id, release_year, spotify_uri, title, artist, cover_url")
+    .select(hasFilter ? `${cols}, ct_card_filters!inner(filter_id)` : cols)
     .in("year_status", ["resolved", "manual"])
     .not("release_year", "is", null);
 
-  if (restrictIds) query = query.in("id", restrictIds);
+  if (hasFilter) query = query.in("ct_card_filters.filter_id", filterIds!);
 
   const { data, error } = await query;
   if (error) throw error;
-  return (data ?? []) as DeckCard[];
+
+  // El inner join repite una carta si está en varios mazos elegidos → dedup por id.
+  const seen = new Set<string>();
+  const out: DeckCard[] = [];
+  for (const c of (data ?? []) as unknown as Array<Record<string, unknown>>) {
+    const id = c.id as string;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push({
+      id,
+      release_year: c.release_year as number,
+      spotify_uri: c.spotify_uri as string,
+      title: c.title as string,
+      artist: c.artist as string,
+      cover_url: (c.cover_url as string | null) ?? null,
+    });
+  }
+  return out;
 }
 
 /** Cartas ya usadas en la partida (anclas, ubicadas, o jugadas en rondas). */
