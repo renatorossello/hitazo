@@ -111,11 +111,29 @@ export function useSpotifyPlayer() {
       await playerRef.current?.activateElement?.();
       const token = await fetchAccessToken();
       if (!token) return;
-      const res = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
-        method: "PUT",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ uris: [uri] }),
-      });
+
+      // position_ms: 0 → SIEMPRE desde el principio (evita seguir el tema anterior
+      // desde donde quedó pausado al cerrar la ronda).
+      const doPlay = () =>
+        fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
+          method: "PUT",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ uris: [uri], position_ms: 0 }),
+        });
+
+      let res = await doPlay();
+      // Entre rondas el device del SDK puede quedar inactivo → Spotify devuelve 404
+      // "Device not found". Lo reactivamos (transfer) y reintentamos, así no termina
+      // resumiendo la canción anterior en vez de arrancar la nueva.
+      if (res.status === 404) {
+        await fetch("https://api.spotify.com/v1/me/player", {
+          method: "PUT",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ device_ids: [deviceId], play: false }),
+        });
+        await new Promise((r) => setTimeout(r, 400));
+        res = await doPlay();
+      }
       if (!res.ok && res.status !== 204) {
         setMessage(`No se pudo reproducir (${res.status}).`);
       }

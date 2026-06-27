@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { getGameByRoom, getCurrentRound, getTeamYears, phaseUpdate } from "@/lib/game/server";
+import { getGameByRoom, getCurrentRound, getTeamYears, teamsInOrder, phaseUpdate } from "@/lib/game/server";
 
 /**
  * POST /api/games/:roomCode/place  { teamId, position }
@@ -34,9 +34,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
     return NextResponse.json({ error: "invalid_position" }, { status: 400 });
   }
 
+  // Si ningún equipo SIN turno tiene fichas, no hay desafío posible → saltamos la
+  // ventana e vamos directo a 'closing' (el turno cierra cuando quiera, sin esperar).
+  const teams = await teamsInOrder(supabase, game.id);
+  const someoneCanChallenge = teams.some((t) => t.id !== round.team_id && t.tokens >= 1);
+  const nextPhase = someoneCanChallenge ? "challenge" : "closing";
+
   const { error } = await supabase
     .from("ct_rounds")
-    .update({ placed_position: position, ...phaseUpdate("challenge") })
+    .update({ placed_position: position, ...phaseUpdate(nextPhase) })
     .eq("id", round.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

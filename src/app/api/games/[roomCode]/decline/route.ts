@@ -30,10 +30,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
     ? round.declined_team_ids
     : [...round.declined_team_ids, teamId];
 
-  // Si todos los equipos sin turno declinaron, cerramos la ventana ya.
+  // Si todos los equipos que PODRÍAN desafiar (con fichas) declinaron, cerramos ya.
+  // Los equipos sin fichas no pueden desafiar, así que no bloquean la ventana.
   const teams = await teamsInOrder(supabase, game.id);
-  const nonTurnCount = teams.filter((t) => t.id !== round.team_id).length;
-  const allDeclined = !round.challenger_id && declined.length >= nonTurnCount;
+  const eligible = teams.filter((t) => t.id !== round.team_id && t.tokens >= 1);
+  const allDeclined = !round.challenger_id && eligible.every((t) => declined.includes(t.id));
 
   const update = allDeclined
     ? { declined_team_ids: declined, ...phaseUpdate("closing") }
