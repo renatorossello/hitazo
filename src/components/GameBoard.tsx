@@ -334,7 +334,7 @@ export default function GameBoard({
           {isHost && round.phase === "reveal" && (
             <div className="flex flex-col items-center gap-2">
               <p className="text-sm text-violet-200">
-                ¿{turnTeam?.name} adivinó <strong>título y artista</strong>?
+                ¿{turnTeam?.name} adivinó <strong>título y artista</strong>? (cierra la ronda)
               </p>
               <div className="flex gap-3">
                 <button
@@ -351,14 +351,6 @@ export default function GameBoard({
                 </button>
               </div>
             </div>
-          )}
-          {isHost && round.phase === "resolved" && (
-            <button
-              onClick={() => act("next-round")}
-              className="rounded-full bg-accent px-10 py-3 text-lg font-bold text-brand-deep transition active:scale-95"
-            >
-              ▶ Iniciar ronda
-            </button>
           )}
         </div>
       )}
