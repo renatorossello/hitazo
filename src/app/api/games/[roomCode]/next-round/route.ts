@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { isHostAuthenticated } from "@/lib/spotify/auth";
+import { isGameHost } from "@/lib/game/host";
 import { getGameByRoom, getCurrentRound, advanceOrFinish } from "@/lib/game/server";
 
 /**
@@ -10,15 +10,15 @@ import { getGameByRoom, getCurrentRound, advanceOrFinish } from "@/lib/game/serv
  * ronda actual está 'resolved'.
  */
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ roomCode: string }> }) {
-  if (!(await isHostAuthenticated())) {
-    return NextResponse.json({ error: "no_host_session" }, { status: 401 });
-  }
   const { roomCode } = await params;
   const supabase = createServiceClient();
 
   const game = await getGameByRoom(supabase, roomCode);
   if (!game || game.status !== "playing") {
     return NextResponse.json({ error: "game_not_playing" }, { status: 409 });
+  }
+  if (!(await isGameHost(game.host_token))) {
+    return NextResponse.json({ error: "no_host_session" }, { status: 401 });
   }
   const round = await getCurrentRound(supabase, game);
   if (!round || round.phase !== "resolved") {

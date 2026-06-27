@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { createServiceClient } from "@/lib/supabase/server";
-import { isHostAuthenticated } from "@/lib/spotify/auth";
+import { isGameHost } from "@/lib/game/host";
 import BoardClient from "@/components/BoardClient";
 
 /**
@@ -19,12 +19,12 @@ export default async function BoardPage({
   const supabase = createServiceClient();
   const { data: game } = await supabase
     .from("ct_games")
-    .select("id")
+    .select("id, host_token")
     .eq("room_code", roomCode)
     .single();
   if (!game) notFound();
 
-  const isHost = await isHostAuthenticated();
+  const isHost = await isGameHost((game.host_token as string) ?? null);
 
   return <BoardClient roomCode={roomCode} isHost={isHost} />;
 }

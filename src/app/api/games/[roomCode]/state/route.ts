@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { isHostAuthenticated } from "@/lib/spotify/auth";
+import { isGameHost } from "@/lib/game/host";
 import { loadGameState } from "@/lib/game/state";
 
 /**
@@ -10,8 +10,15 @@ import { loadGameState } from "@/lib/game/state";
  */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ roomCode: string }> }) {
   const { roomCode } = await params;
-  const isHost = await isHostAuthenticated();
   const supabase = createServiceClient();
+
+  // El host (SDK o manual) recibe el URI; los jugadores no.
+  const { data: g } = await supabase
+    .from("ct_games")
+    .select("host_token")
+    .eq("room_code", roomCode.toUpperCase())
+    .maybeSingle();
+  const isHost = await isGameHost((g?.host_token as string) ?? null);
 
   const state = await loadGameState(supabase, roomCode, { includeCardUri: isHost });
   if (!state) {

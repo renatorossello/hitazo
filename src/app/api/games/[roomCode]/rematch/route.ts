@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { isHostAuthenticated } from "@/lib/spotify/auth";
+import { isGameHost } from "@/lib/game/host";
 import { getGameByRoom } from "@/lib/game/server";
 
 /**
@@ -10,14 +10,14 @@ import { getGameByRoom } from "@/lib/game/server";
  * conectados sin reingresar.
  */
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ roomCode: string }> }) {
-  if (!(await isHostAuthenticated())) {
-    return NextResponse.json({ error: "no_host_session" }, { status: 401 });
-  }
   const { roomCode } = await params;
   const supabase = createServiceClient();
 
   const game = await getGameByRoom(supabase, roomCode);
   if (!game) return NextResponse.json({ error: "game_not_found" }, { status: 404 });
+  if (!(await isGameHost(game.host_token))) {
+    return NextResponse.json({ error: "no_host_session" }, { status: 401 });
+  }
 
   const { data: teams } = await supabase.from("ct_teams").select("id").eq("game_id", game.id);
   const teamIds = (teams ?? []).map((t) => t.id);

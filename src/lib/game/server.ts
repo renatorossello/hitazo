@@ -18,6 +18,7 @@ export type GameRow = {
     targetCards: number;
   };
   filter_ids: string[] | null;
+  host_token: string | null;
 };
 
 export type RoundRow = {
@@ -48,7 +49,7 @@ export function phaseUpdate(phase: string): { phase: string; phase_started_at: s
 export async function getGameByRoom(supabase: SupabaseClient, roomCode: string): Promise<GameRow | null> {
   const { data } = await supabase
     .from("ct_games")
-    .select("id, status, current_turn, config, filter_ids")
+    .select("id, status, current_turn, config, filter_ids, host_token")
     .eq("room_code", roomCode.toUpperCase())
     .single();
   if (!data) return null;
@@ -58,6 +59,7 @@ export async function getGameByRoom(supabase: SupabaseClient, roomCode: string):
     current_turn: data.current_turn,
     config: { ...DEFAULT_CONFIG, ...(data.config ?? {}) },
     filter_ids: (data.filter_ids as string[]) ?? null,
+    host_token: (data.host_token as string) ?? null,
   };
 }
 

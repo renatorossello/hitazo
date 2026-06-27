@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { isHostAuthenticated } from "@/lib/spotify/auth";
+import { isGameHost } from "@/lib/game/host";
 import { pickUnusedCards } from "@/lib/game/deck";
 import { phaseUpdate } from "@/lib/game/server";
 
@@ -21,9 +21,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
 }
 
 async function startGame(req: NextRequest, params: Promise<{ roomCode: string }>) {
-  if (!(await isHostAuthenticated())) {
-    return NextResponse.json({ error: "no_host_session" }, { status: 401 });
-  }
   const { roomCode } = await params;
   const body = (await req.json().catch(() => ({}))) as {
     targetCards?: number;
@@ -35,10 +32,13 @@ async function startGame(req: NextRequest, params: Promise<{ roomCode: string }>
 
   const { data: game } = await supabase
     .from("ct_games")
-    .select("id, status, filter_ids, config")
+    .select("id, status, filter_ids, config, host_token")
     .eq("room_code", roomCode.toUpperCase())
     .single();
   if (!game) return NextResponse.json({ error: "game_not_found" }, { status: 404 });
+  if (!(await isGameHost(game.host_token))) {
+    return NextResponse.json({ error: "no_host_session" }, { status: 401 });
+  }
   if (game.status !== "lobby") {
     return NextResponse.json({ error: "already_started" }, { status: 409 });
   }

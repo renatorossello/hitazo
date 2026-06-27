@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { isHostAuthenticated } from "@/lib/spotify/auth";
+import { isGameHost } from "@/lib/game/host";
 import { getGameByRoom, getCurrentRound, getTeamYears, phaseUpdate } from "@/lib/game/server";
 import { isPlacementCorrect } from "@/lib/game/rules";
 
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
   }
 
   // Autorización: el host siempre (timer/forzar); el jugador en turno solo en 'closing'.
-  const isHost = await isHostAuthenticated();
+  const isHost = await isGameHost(game.host_token);
   const isTurnPlayer = Boolean(body.teamId) && body.teamId === round.team_id;
   if (!isHost && !(isTurnPlayer && round.phase === "closing")) {
     return NextResponse.json({ error: "not_allowed" }, { status: 403 });
