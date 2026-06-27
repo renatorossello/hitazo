@@ -89,8 +89,21 @@ export default function GameBoard({
   /* eslint-enable react-hooks/set-state-in-effect */
 
   async function playCard() {
-    if (!round?.cardUri) return;
-    await player.play(round.cardUri);
+    // Pedimos la carta MÁS actual al server antes de reproducir: si por una carrera
+    // de estado el board todavía tuviera la ronda anterior, igual sonaría la de la
+    // ronda EN CURSO. Así nunca se reproduce el tema de la ronda pasada.
+    let uri = round?.cardUri ?? null;
+    try {
+      const res = await fetch(`/api/games/${state.roomCode}/state`);
+      if (res.ok) {
+        const fresh = (await res.json()) as GameState;
+        uri = fresh.round?.cardUri ?? uri;
+      }
+    } catch {
+      /* si falla, usamos el uri que ya teníamos */
+    }
+    if (!uri) return;
+    await player.play(uri);
     act("play"); // marca que ya suena → el turno ve el selector recién ahora
   }
 
