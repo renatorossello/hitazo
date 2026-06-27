@@ -10,6 +10,17 @@ import { phaseUpdate } from "@/lib/game/server";
  * fija el orden de turnos (join_order), elige la primera carta y arranca el turno 0.
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ roomCode: string }> }) {
+  try {
+    return await startGame(req, params);
+  } catch (e) {
+    // Cualquier excepción inesperada llegaba al cliente como 500 sin detalle
+    // ("No se pudo empezar"). Ahora la logueamos y la devolvemos para diagnosticar.
+    console.error("[start] fallo inesperado:", e);
+    return NextResponse.json({ error: `start_failed: ${String((e as Error)?.message ?? e)}` }, { status: 500 });
+  }
+}
+
+async function startGame(req: NextRequest, params: Promise<{ roomCode: string }>) {
   if (!(await isHostAuthenticated())) {
     return NextResponse.json({ error: "no_host_session" }, { status: 401 });
   }

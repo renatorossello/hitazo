@@ -86,7 +86,9 @@ export default function BoardClient({ roomCode, isHost }: { roomCode: string; is
           no_host_session: "Tu sesión de Spotify venció. Reconectá.",
           already_started: "La partida ya arrancó.",
         };
-        setStartError(msgs[data.error] ?? "No se pudo empezar.");
+        // Para errores conocidos, mensaje lindo. Para el resto, mostramos el detalle
+        // real (incluye el server-side) para poder diagnosticar en vez de un genérico.
+        setStartError(msgs[data.error] ?? (data.error ? String(data.error) : "No se pudo empezar."));
         return;
       }
       channelRef.current?.send({ type: "broadcast", event: GameEvent.StateChanged, payload: {} });
