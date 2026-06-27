@@ -159,6 +159,15 @@ export default function GameBoard({
         </div>
       )}
 
+      {/* En la tele (smart TV con navegador): entrá a /tv y poné el código. */}
+      {origin && (
+        <p className="text-center text-sm text-violet-200">
+          📺 En la tele entrá a{" "}
+          <span className="font-bold text-accent">{origin.replace(/^https?:\/\//, "")}/tv</span> y poné{" "}
+          <span className="font-mono font-bold tracking-widest text-accent">{state.roomCode}</span>
+        </p>
+      )}
+
       {state.status === "finished" && (
         <div className="flex flex-col items-center gap-4 rounded-2xl bg-teal px-6 py-6 text-center text-white shadow-lg">
           <div>
