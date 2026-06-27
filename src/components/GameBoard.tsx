@@ -22,8 +22,11 @@ export default function GameBoard({
   isHost: boolean;
   act: (path: string, body?: object) => Promise<Response>;
 }) {
-  const player = useSpotifyPlayer();
+  const manual = state.config.playbackMode === "manual";
+  const player = useSpotifyPlayer({ enabled: !manual });
   const round = state.round;
+  const trackId = round?.cardUri ? round.cardUri.split(":").pop() : null;
+  const deepLink = trackId ? `https://open.spotify.com/track/${trackId}` : null;
   const turnTeam = state.teams.find((t) => t.id === round?.teamId) ?? null;
   const challengerTeam = state.teams.find((t) => t.id === round?.challengerId) ?? null;
 
@@ -108,7 +111,7 @@ export default function GameBoard({
   }
 
   async function resolveWith(metaAwarded: boolean) {
-    await player.pause(); // frena la canción si seguía sonando
+    if (!manual) await player.pause(); // SDK: frena la canción; en manual la pausa el host
     await act("resolve", { metaAwarded });
   }
 
@@ -195,8 +198,41 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* Controles de reproducción (host) */}
-      {isHost && (
+      {/* Controles de reproducción — modo MANUAL (sin API): deep link al Spotify del host */}
+      {isHost && manual && (
+        <div className="flex flex-col items-center gap-3 rounded-2xl bg-white/5 p-4 ring-1 ring-white/10">
+          <p className="text-center text-sm text-violet-200">
+            📱🔄 Tocá <strong>Reproducir</strong> y <strong>dá vuelta el celu</strong>: el tema suena en tu Spotify.
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            {deepLink ? (
+              // <a> real (gesto directo) para que iOS abra Spotify y arranque solo.
+              <a
+                href={deepLink}
+                onClick={() => act("play")}
+                className="rounded-full bg-[#1DB954] px-6 py-2.5 font-bold text-white transition active:scale-95"
+              >
+                ▶ Reproducir (abre Spotify)
+              </a>
+            ) : (
+              <span className="text-sm text-violet-300">Sin tema…</span>
+            )}
+            {(round?.phase === "challenge" || round?.phase === "closing") && (
+              <button onClick={() => act("finalize")} className="rounded-full bg-accent px-5 py-2.5 text-sm font-bold text-brand-deep">
+                ⏩ Forzar fin de ronda
+              </button>
+            )}
+            {round?.phase === "playing" && (
+              <button onClick={() => act("skip")} className="rounded-full border border-white/30 px-5 py-2.5 text-sm font-semibold hover:bg-white/10">
+                ⏭ Saltear tema
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Controles de reproducción — modo SDK (host con Spotify) */}
+      {isHost && !manual && (
         <div className="flex flex-col items-center gap-3 rounded-2xl bg-white/5 p-4 ring-1 ring-white/10">
           {player.status !== "ready" && <p className="text-sm text-violet-200">{player.message}</p>}
           {player.status === "no_session" && (

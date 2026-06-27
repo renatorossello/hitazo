@@ -56,6 +56,9 @@ export type GameConfig = {
   challengeWindowSec: number;
   closeTurnSec: number;
   targetCards: number;
+  // 'sdk' = host con Spotify, audio por Web Playback SDK. 'manual' = host sin API,
+  // reproduce en su propio Spotify vía deep link (modo "público", sin allowlist).
+  playbackMode: "sdk" | "manual";
 };
 
 export type GameState = {
@@ -75,6 +78,7 @@ const DEFAULT_CONFIG: GameConfig = {
   challengeWindowSec: 30,
   closeTurnSec: 20,
   targetCards: 10,
+  playbackMode: "sdk",
 };
 
 type EmbeddedCard = {

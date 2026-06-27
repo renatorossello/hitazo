@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
  */
 export type PlayerStatus = "loading" | "no_session" | "ready" | "error";
 
-export function useSpotifyPlayer() {
+export function useSpotifyPlayer({ enabled = true }: { enabled?: boolean } = {}) {
   const [status, setStatus] = useState<PlayerStatus>("loading");
   const [message, setMessage] = useState("Cargando el SDK de Spotify…");
   const [deviceId, setDeviceId] = useState<string | null>(null);
@@ -38,6 +38,7 @@ export function useSpotifyPlayer() {
   }, []);
 
   useEffect(() => {
+    if (!enabled) return; // modo manual: no inicializamos el SDK ni pedimos token
     let cancelled = false;
 
     function initPlayer() {
@@ -101,7 +102,7 @@ export function useSpotifyPlayer() {
       cancelled = true;
       playerRef.current?.disconnect();
     };
-  }, [fetchAccessToken]);
+  }, [fetchAccessToken, enabled]);
 
   const play = useCallback(
     async (uri: string) => {
