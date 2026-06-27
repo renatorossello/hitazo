@@ -142,6 +142,13 @@ export function useSpotifyPlayer({ enabled = true }: { enabled?: boolean } = {})
     [deviceId, fetchAccessToken]
   );
 
+  // Desbloquea el <audio> del SDK DENTRO del gesto del usuario (sincrónico). Hay que
+  // llamarlo apenas se toca el botón, ANTES de cualquier await, o el primer play de
+  // la sesión queda sin sonido (los navegadores exigen el unlock dentro del gesto).
+  const activate = useCallback(() => {
+    void playerRef.current?.activateElement?.();
+  }, []);
+
   const togglePlay = useCallback(async () => {
     await playerRef.current?.[isPaused ? "resume" : "pause"]();
   }, [isPaused]);
@@ -155,5 +162,5 @@ export function useSpotifyPlayer({ enabled = true }: { enabled?: boolean } = {})
     await playerRef.current?.resume();
   }, []);
 
-  return { status, message, deviceId, isPaused, play, togglePlay, pause, replay };
+  return { status, message, deviceId, isPaused, activate, play, togglePlay, pause, replay };
 }

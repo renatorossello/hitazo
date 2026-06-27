@@ -69,7 +69,7 @@ if (error) { console.error(error); process.exit(1); }
 
 console.log(`Reintentando ${cards.length} cartas needs_review (MB título limpio + Deezer)...\n`);
 
-let mbOk = 0, dzOk = 0, still = 0, neterr = 0;
+let mbOk = 0, dzOk = 0, still = 0;
 for (let i = 0; i < cards.length; i++) {
   const c = cards[i];
   // 1) MB por ISRC, 2) MB por título LIMPIO + artista

@@ -92,6 +92,10 @@ export default function GameBoard({
   /* eslint-enable react-hooks/set-state-in-effect */
 
   async function playCard() {
+    // PRIMERO desbloqueamos el audio dentro del gesto del click (sincrónico, antes de
+    // cualquier await): si no, el fetch de /state de abajo rompe el gesto y el PRIMER
+    // play de la sesión queda sin sonido.
+    player.activate();
     // Pedimos la carta MÁS actual al server antes de reproducir: si por una carrera
     // de estado el board todavía tuviera la ronda anterior, igual sonaría la de la
     // ronda EN CURSO. Así nunca se reproduce el tema de la ronda pasada.
