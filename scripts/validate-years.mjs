@@ -68,13 +68,20 @@ async function deezerYear(title, artist) {
 
 const supabase = createClient(SUPA_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
-const { data: cards, error } = await supabase
-  .from("ct_cards")
-  .select("id, title, artist, isrc, release_year, year_status")
-  .in("year_status", ["resolved", "manual"])
-  .not("release_year", "is", null)
-  .order("artist", { ascending: true });
-if (error) { console.error(error); process.exit(1); }
+// Paginado: Supabase corta en 1000 filas por request, así que traemos en lotes.
+const cards = [];
+for (let from = 0; ; from += 1000) {
+  const { data, error } = await supabase
+    .from("ct_cards")
+    .select("id, title, artist, isrc, release_year, year_status")
+    .in("year_status", ["resolved", "manual"])
+    .not("release_year", "is", null)
+    .order("artist", { ascending: true })
+    .range(from, from + 999);
+  if (error) { console.error(error); process.exit(1); }
+  cards.push(...(data ?? []));
+  if (!data || data.length < 1000) break;
+}
 
 console.log(`Revisando ${cards.length} cartas jugables...\n`);
 
