@@ -1,16 +1,14 @@
 import { NextResponse } from "next/server";
-import { isHostAuthenticated } from "@/lib/spotify/auth";
 import { createServiceClient } from "@/lib/supabase/server";
 
 /**
  * GET /api/admin/decks
  * Lista los mazos (ct_deck_filters) con cuántas cartas tienen y cuántas son jugables.
- * Lo usan el admin y el lobby (para elegir qué mazos jugar). Host-only.
+ * Lo usan el admin y el lobby (para elegir qué mazos jugar). Lectura no sensible (solo
+ * nombres/conteos), SIN gate de Spotify: así el host en modo manual también ve los
+ * mazos en el lobby. Las escrituras (import/borrar) siguen protegidas.
  */
 export async function GET() {
-  if (!(await isHostAuthenticated())) {
-    return NextResponse.json({ error: "no_host_session" }, { status: 401 });
-  }
   const supabase = createServiceClient();
 
   const { data: filters } = await supabase
