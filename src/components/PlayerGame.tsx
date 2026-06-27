@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import TeamTimelineTabs, { useActiveTab } from "./TeamTimelineTabs";
 import { useCountdown } from "./useCountdown";
+import { playEndTurnCue } from "@/lib/sound";
 import type { VMarker } from "./VerticalTimeline";
 import type { GameState } from "@/lib/game/state";
 import type { StoredPlayer } from "@/lib/game/player";
@@ -26,6 +27,7 @@ export default function PlayerGame({
   const [activeTab, setActiveTab] = useActiveTab(state);
 
   const round = state.round;
+  const manual = state.config.playbackMode === "manual";
   // Countdown sincronizado de la fase activa (desafío / cierre de turno).
   const timerLimit =
     round?.phase === "challenge"
@@ -112,10 +114,15 @@ export default function PlayerGame({
       confirm = (
         <button
           disabled={busy}
-          onClick={() => submit("finalize")}
+          onClick={() => {
+            // En modo manual: suena un aviso (este celu está en primer plano) para que
+            // el host dé vuelta el celu y pause su Spotify.
+            if (manual) playEndTurnCue();
+            submit("finalize");
+          }}
           className="w-full rounded-2xl bg-brand px-6 py-4 text-lg font-bold text-white shadow-md transition active:scale-[0.98] disabled:opacity-40"
         >
-          Finalizar ronda{clock}
+          {manual ? "Terminé el turno 🔔" : "Finalizar ronda"}{clock}
         </button>
       );
     } else {
