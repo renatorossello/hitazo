@@ -91,6 +91,9 @@ export default function JoinPage() {
   }
 
   const inProgress = typeof game === "object" && game !== null && game.status !== "lobby";
+  // Equipos ya creados en el lobby: para que VARIOS celus se sumen al MISMO equipo
+  // (cualquiera ubica/desafía; gana la primera acción que llega al server).
+  const lobbyTeams = typeof game === "object" && game !== null && game.status === "lobby" ? game.teams : [];
 
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-7 bg-gradient-to-b from-brand-deep via-brand-dark to-brand px-6 py-12 text-white">
@@ -129,27 +132,47 @@ export default function JoinPage() {
               ))}
           </div>
         ) : (
-          // Lobby (o código incompleto) → crear equipo con nombre.
-          <form onSubmit={createTeam} className="flex flex-col gap-5">
-            <label className="flex flex-col gap-1.5 text-sm font-medium text-violet-200">
-              Nombre del equipo
-              <input
-                value={teamName}
-                onChange={(e) => setTeamName(e.target.value)}
-                maxLength={40}
-                className="rounded-2xl border-2 border-white/20 bg-white/10 px-4 py-4 text-lg text-white placeholder-white/30 outline-none focus:border-accent"
-                placeholder="Los Pibes"
-              />
-            </label>
-            {error && <p className="rounded-xl bg-red-500/20 px-3 py-2 text-sm text-red-200">{error}</p>}
-            <button
-              type="submit"
-              disabled={loading || code.length !== 6 || !teamName}
-              className="rounded-2xl bg-accent px-6 py-4 text-lg font-bold text-brand-deep shadow-lg transition hover:brightness-105 active:scale-[0.98] disabled:opacity-40"
-            >
-              {loading ? "Entrando…" : "Entrar"}
-            </button>
-          </form>
+          // Lobby → sumarse a un equipo existente (varios celus por equipo) o crear uno.
+          <div className="flex flex-col gap-5">
+            {lobbyTeams.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <p className="text-center text-sm text-violet-200">Sumate a un equipo que ya está:</p>
+                {lobbyTeams
+                  .slice()
+                  .sort((a, b) => a.joinOrder - b.joinOrder)
+                  .map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => rejoin(t)}
+                      className="rounded-2xl bg-white/10 px-4 py-3 text-lg font-bold ring-1 ring-white/20 transition hover:bg-white/20 active:scale-[0.98]"
+                    >
+                      {t.name}
+                    </button>
+                  ))}
+                <p className="text-center text-xs text-violet-300/70">— o creá uno nuevo —</p>
+              </div>
+            )}
+            <form onSubmit={createTeam} className="flex flex-col gap-5">
+              <label className="flex flex-col gap-1.5 text-sm font-medium text-violet-200">
+                Nombre del equipo
+                <input
+                  value={teamName}
+                  onChange={(e) => setTeamName(e.target.value)}
+                  maxLength={40}
+                  className="rounded-2xl border-2 border-white/20 bg-white/10 px-4 py-4 text-lg text-white placeholder-white/30 outline-none focus:border-accent"
+                  placeholder="Los Pibes"
+                />
+              </label>
+              {error && <p className="rounded-xl bg-red-500/20 px-3 py-2 text-sm text-red-200">{error}</p>}
+              <button
+                type="submit"
+                disabled={loading || code.length !== 6 || !teamName}
+                className="rounded-2xl bg-accent px-6 py-4 text-lg font-bold text-brand-deep shadow-lg transition hover:brightness-105 active:scale-[0.98] disabled:opacity-40"
+              >
+                {loading ? "Entrando…" : "Entrar"}
+              </button>
+            </form>
+          </div>
         )}
       </div>
     </main>
