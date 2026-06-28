@@ -1,14 +1,14 @@
 import type { Viewport } from "next";
 
 /**
- * Los navegadores de smart TV (Tizen/Samsung, webOS, etc.) suelen NO respetar
- * `width=device-width` y arman un viewport angosto → la vista se ve apilada y chica.
- * Forzamos un viewport ancho fijo (1280) para que el TV maquete apaisado y escale a
- * la pantalla. Aplica a /tv y /tv/[roomCode]. Los navegadores de escritorio lo ignoran.
+ * La vista TV NO depende del viewport: dibuja un escenario fijo 1280×720 y lo escala
+ * con transform por JS al tamaño real (ver TvView). Por eso dejamos el viewport
+ * natural — los TV que ignoran/malinterpretan el viewport igual se ven bien, porque
+ * el escalado lo controla el JS leyendo window.innerWidth/innerHeight.
  */
-// width sin initialScale: el TV escala los 1280 px para LLENAR la pantalla.
 export const viewport: Viewport = {
-  width: 1280,
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function TvLayout({ children }: { children: React.ReactNode }) {

@@ -10,12 +10,40 @@ import { useWakeLock } from "./useWakeLock";
 import Logo from "./Logo";
 
 /**
- * Vista para TELE (smart TV con navegador): apaisada, grande y legible desde el sillón.
- * Otro cliente más del juego (no espeja el celular del host). Cada equipo es una FILA
- * con su línea de tiempo HORIZONTAL (viejas izq → nuevas der), estilo modo host, así
- * entran muchas cartas. Sobre la línea del turno se marcan el hueco donde ubicó y donde
- * desafía el otro. Arriba: etapa + cuenta regresiva. Reveal horizontal y compacto.
+ * Vista para TELE. Robusta para navegadores de smart TV (Samsung/Tizen) que NO
+ * respetan el viewport: en vez de depender de vw/vh, dibujamos un "escenario" FIJO
+ * de 1280×720 con medidas en px y lo escalamos con transform al tamaño real de la
+ * pantalla (lo que hacen las apps de TV). Así siempre queda apaisado y nítido.
  */
+const W = 1280;
+const H = 720;
+
+function Stage({ children }: { children: ReactNode }) {
+  const [scale, setScale] = useState(1);
+  useEffect(() => {
+    const fit = () => setScale(Math.min(window.innerWidth / W, window.innerHeight / H));
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, []);
+  return (
+    <div style={{ position: "fixed", inset: 0, overflow: "hidden", background: "#190a36" }}>
+      <div
+        style={{
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          width: W,
+          height: H,
+          transform: `translate(-50%, -50%) scale(${scale})`,
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export default function TvView({ roomCode }: { roomCode: string }) {
   const [state, setState] = useState<GameState | null>(null);
   const [joinUrl, setJoinUrl] = useState("");
@@ -54,9 +82,9 @@ export default function TvView({ roomCode }: { roomCode: string }) {
 
   if (!state) {
     return (
-      <main className="flex h-screen items-center justify-center bg-gradient-to-br from-brand-deep to-brand-dark text-2xl text-violet-300">
-        Cargando…
-      </main>
+      <Stage>
+        <div className="flex h-full w-full items-center justify-center text-3xl text-violet-300">Cargando…</div>
+      </Stage>
     );
   }
 
@@ -66,62 +94,64 @@ export default function TvView({ roomCode }: { roomCode: string }) {
   const showMarks = !!round && ["challenge", "closing", "reveal", "resolved"].includes(round.phase);
 
   return (
-    <main className="flex h-screen w-screen flex-col overflow-hidden bg-gradient-to-br from-brand-deep via-brand-dark to-brand p-[2vh] text-white">
-      {/* Barra superior: ESTADO del juego + código/QR para sumarse */}
-      <header className="flex shrink-0 items-stretch gap-[1.5vh]">
-        <Logo className="self-center text-[3.4vh]" />
-        <div className="flex flex-1 items-center justify-center">
-          <StatusBanner state={state} round={round} turnTeam={turnTeam} challengerTeam={challengerTeam} secondsLeft={secondsLeft} />
-        </div>
-        <div className="flex items-center gap-[1vw] rounded-[1.2vh] bg-white/10 px-[1.2vw] py-[0.9vh] ring-1 ring-white/15">
-          <div className="text-right">
-            <p className="text-[1.4vh] uppercase tracking-widest text-violet-200">Sumate</p>
-            <p className="font-mono text-[3.2vh] font-extrabold leading-none tracking-[0.1em] text-accent">{state.roomCode}</p>
+    <Stage>
+      <div className="flex h-full w-full flex-col bg-gradient-to-br from-brand-deep via-brand-dark to-brand p-4 text-white">
+        {/* Barra superior */}
+        <header className="flex shrink-0 items-stretch gap-3">
+          <Logo className="self-center text-3xl" />
+          <div className="flex flex-1 items-center justify-center">
+            <StatusBanner state={state} round={round} turnTeam={turnTeam} challengerTeam={challengerTeam} secondsLeft={secondsLeft} />
           </div>
-          {joinUrl && (
-            <div className="rounded-[0.7vh] bg-white p-[0.4vh]">
-              <QRCodeSVG value={joinUrl} size={52} />
+          <div className="flex items-center gap-3 rounded-xl bg-white/10 px-4 py-2 ring-1 ring-white/15">
+            <div className="text-right">
+              <p className="text-xs uppercase tracking-widest text-violet-200">Sumate</p>
+              <p className="font-mono text-3xl font-extrabold leading-none tracking-wider text-accent">{state.roomCode}</p>
             </div>
-          )}
-        </div>
-      </header>
-
-      {/* Reveal horizontal y compacto (sin leyenda "Reveal") */}
-      {reveal && (
-        <div className="mt-[1.2vh] flex shrink-0 items-center gap-[2vw] rounded-[1.2vh] bg-white/10 px-[2vw] py-[1vh] ring-[0.3vh] ring-accent">
-          {reveal.coverUrl && (
-            // eslint-disable-next-line @next/next/no-img-element -- carátula del CDN
-            <img src={reveal.coverUrl} alt="" className="h-[11vh] w-[11vh] shrink-0 rounded-[0.9vh] shadow-xl" />
-          )}
-          <p className="shrink-0 font-mono text-[10vh] font-black leading-none text-accent drop-shadow-lg">{reveal.year}</p>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[3.8vh] font-extrabold leading-tight">{reveal.title}</p>
-            <p className="truncate text-[2.4vh] text-violet-200">{reveal.artist}</p>
+            {joinUrl && (
+              <div className="rounded bg-white p-1">
+                <QRCodeSVG value={joinUrl} size={56} />
+              </div>
+            )}
           </div>
-          <div className="shrink-0 text-right">
-            <RevealOutcome round={round!} turnTeam={turnTeam} challengerTeam={challengerTeam} state={state} />
-          </div>
-        </div>
-      )}
+        </header>
 
-      {/* Equipos como FILAS con línea de tiempo horizontal */}
-      <div className="mt-[1.2vh] flex min-h-0 flex-1 flex-col gap-[1.2vh]">
-        {state.teams.map((team) => {
-          const isTurn = team.id === round?.teamId;
-          return (
-            <TeamRow
-              key={team.id}
-              team={team}
-              target={state.config.targetCards}
-              isTurn={isTurn}
-              isChallenger={team.id === round?.challengerId}
-              placedPos={isTurn && showMarks ? round!.placedPosition : null}
-              challengePos={isTurn && showMarks ? round!.challengePosition : null}
-            />
-          );
-        })}
+        {/* Reveal horizontal compacto */}
+        {reveal && (
+          <div className="mt-3 flex shrink-0 items-center gap-6 rounded-xl bg-white/10 px-6 py-2 ring-4 ring-accent">
+            {reveal.coverUrl && (
+              // eslint-disable-next-line @next/next/no-img-element -- carátula del CDN
+              <img src={reveal.coverUrl} alt="" className="h-[88px] w-[88px] shrink-0 rounded-lg shadow-xl" />
+            )}
+            <p className="shrink-0 font-mono text-[80px] font-black leading-none text-accent drop-shadow-lg">{reveal.year}</p>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-4xl font-extrabold leading-tight">{reveal.title}</p>
+              <p className="truncate text-xl text-violet-200">{reveal.artist}</p>
+            </div>
+            <div className="shrink-0 text-right">
+              <RevealOutcome round={round!} turnTeam={turnTeam} challengerTeam={challengerTeam} state={state} />
+            </div>
+          </div>
+        )}
+
+        {/* Equipos como filas con timeline horizontal */}
+        <div className="mt-3 flex min-h-0 flex-1 flex-col gap-3">
+          {state.teams.map((team) => {
+            const isTurn = team.id === round?.teamId;
+            return (
+              <TeamRow
+                key={team.id}
+                team={team}
+                target={state.config.targetCards}
+                isTurn={isTurn}
+                isChallenger={team.id === round?.challengerId}
+                placedPos={isTurn && showMarks ? round!.placedPosition : null}
+                challengePos={isTurn && showMarks ? round!.challengePosition : null}
+              />
+            );
+          })}
+        </div>
       </div>
-    </main>
+    </Stage>
   );
 }
 
@@ -137,7 +167,7 @@ function StatusBanner({
   }
   if (!round || !turnTeam) return <Pill text="…" />;
 
-  const clock = secondsLeft != null ? <span className="ml-[1vw] font-black text-accent">⏱ {secondsLeft}s</span> : null;
+  const clock = secondsLeft != null ? <span className="ml-3 font-black text-accent">⏱ {secondsLeft}s</span> : null;
 
   let label: ReactNode;
   let tone: "turn" | "challenge" = "turn";
@@ -157,7 +187,7 @@ function StatusBanner({
   }
 
   return (
-    <div className={`flex items-center rounded-[1.2vh] px-[2vw] py-[1.1vh] text-[3.2vh] font-semibold shadow-lg ring-1 ring-white/15 ${tone === "challenge" ? "bg-accent text-brand-deep" : "bg-brand"}`}>
+    <div className={`flex items-center rounded-xl px-6 py-2 text-3xl font-semibold shadow-lg ring-1 ring-white/15 ${tone === "challenge" ? "bg-accent text-brand-deep" : "bg-brand"}`}>
       <span>{label}</span>
     </div>
   );
@@ -166,12 +196,12 @@ function StatusBanner({
 function RevealOutcome({ round, turnTeam, challengerTeam, state }: { round: StateRound; turnTeam: StateTeam | null; challengerTeam: StateTeam | null; state: GameState }) {
   const winner = round.cardWinnerId ? state.teams.find((t) => t.id === round.cardWinnerId) : null;
   return (
-    <div className="text-[2.9vh] leading-snug">
+    <div className="text-[28px] leading-snug">
       <p>{turnTeam?.name}: <b className={round.placedCorrect ? "text-teal" : "text-red-400"}>{round.placedCorrect ? "bien ✓" : "mal ✗"}</b></p>
       {challengerTeam && (
         <p>{challengerTeam.name}: <b className={round.challengeCorrect ? "text-teal" : "text-red-400"}>{round.challengeCorrect ? "bien ✓" : "mal ✗"}</b></p>
       )}
-      {winner && <p className="text-[2.4vh] font-bold text-teal">🃏 carta para {winner.name}</p>}
+      {winner && <p className="text-2xl font-bold text-teal">🃏 carta para {winner.name}</p>}
     </div>
   );
 }
@@ -182,50 +212,50 @@ function TeamRow({
   team: StateTeam; target: number; isTurn: boolean; isChallenger: boolean; placedPos: number | null; challengePos: number | null;
 }) {
   const cards = [...team.cards].sort((a, b) => a.position - b.position);
-  const ring = isTurn ? "ring-[0.35vh] ring-accent" : isChallenger ? "ring-[0.25vh] ring-white/40" : "ring-1 ring-white/10";
+  const ring = isTurn ? "ring-4 ring-accent" : isChallenger ? "ring-2 ring-white/40" : "ring-1 ring-white/10";
 
   const gap = (i: number) => {
     const t = placedPos === i;
     const c = challengePos === i;
     return (
-      <div key={`g${i}`} className="flex w-[2.4vw] shrink-0 flex-col items-center justify-end gap-[0.4vh]">
+      <div key={`g${i}`} className="flex w-7 shrink-0 flex-col items-center justify-end gap-1">
         {(t || c) && (
-          <span className={`whitespace-nowrap rounded px-[0.4vw] py-[0.1vh] text-[1.5vh] font-extrabold leading-tight ${t ? "bg-brand text-white" : "bg-accent text-brand-deep"}`}>
+          <span className={`whitespace-nowrap rounded px-1 py-0.5 text-[13px] font-extrabold leading-tight ${t ? "bg-brand text-white" : "bg-accent text-brand-deep"}`}>
             {t ? "turno" : "desafío"}
           </span>
         )}
-        <div className={`w-[0.4vw] flex-1 rounded ${t || c ? "bg-accent" : "bg-white/15"}`} />
+        <div className={`w-1.5 flex-1 rounded ${t || c ? "bg-accent" : "bg-white/15"}`} />
       </div>
     );
   };
 
   return (
-    <section className={`flex min-h-0 flex-1 flex-col rounded-[1.2vh] bg-white/5 px-[1.2vw] py-[1vh] ${ring}`}>
-      <div className="mb-[0.7vh] flex shrink-0 items-center justify-between">
-        <span className="flex items-center gap-[0.7vw] truncate text-[3vh] font-extrabold">
-          {isTurn && <span className="rounded bg-accent px-[0.6vw] py-[0.1vh] text-[1.7vh] font-bold text-brand-deep">turno</span>}
+    <section className={`flex min-h-0 flex-1 flex-col rounded-xl bg-white/5 px-4 py-2 ${ring}`}>
+      <div className="mb-2 flex shrink-0 items-center justify-between">
+        <span className="flex items-center gap-2 truncate text-2xl font-extrabold">
+          {isTurn && <span className="rounded bg-accent px-2 py-0.5 text-sm font-bold text-brand-deep">turno</span>}
           {team.name}
         </span>
-        <span className="shrink-0 text-[2.4vh] font-semibold text-violet-100">🪙 {team.tokens} · {team.cards.length}/{target}</span>
+        <span className="shrink-0 text-xl font-semibold text-violet-100">🪙 {team.tokens} · {team.cards.length}/{target}</span>
       </div>
 
       <div className="flex min-h-0 flex-1 items-stretch">
         {gap(0)}
         {cards.map((c, i) => (
           <div key={c.cardId} className="flex min-w-0 flex-1 items-stretch">
-            <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-[0.6vh] rounded-[0.7vh] bg-white px-[0.4vw] py-[0.5vh] text-gray-800">
-              <span className="font-mono text-[2.7vh] font-black leading-none text-brand">{c.year}</span>
-              <span className="line-clamp-3 w-full text-center text-[1.9vh] font-medium leading-tight text-gray-600">{c.title}</span>
+            <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-lg bg-white px-1.5 py-1 text-gray-800">
+              <span className="font-mono text-2xl font-black leading-none text-brand">{c.year}</span>
+              <span className="line-clamp-3 w-full text-center text-base font-medium leading-tight text-gray-600">{c.title}</span>
             </div>
             {gap(i + 1)}
           </div>
         ))}
-        {cards.length === 0 && <p className="self-center pl-[1vw] text-[2vh] text-violet-300">Sin cartas…</p>}
+        {cards.length === 0 && <p className="self-center pl-3 text-xl text-violet-300">Sin cartas…</p>}
       </div>
     </section>
   );
 }
 
 function Pill({ text, tone }: { text: string; tone?: "win" }) {
-  return <div className={`rounded-[1.2vh] px-[2vw] py-[1.1vh] text-[3.2vh] font-extrabold shadow-lg ${tone === "win" ? "bg-teal" : "bg-brand"}`}>{text}</div>;
+  return <div className={`rounded-xl px-6 py-2 text-3xl font-extrabold shadow-lg ${tone === "win" ? "bg-teal" : "bg-brand"}`}>{text}</div>;
 }
