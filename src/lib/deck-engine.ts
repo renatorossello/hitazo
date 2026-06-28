@@ -351,26 +351,34 @@ export async function importTracks(
 ): Promise<{ imported: number }> {
   if (tracks.length === 0) return { imported: 0 };
 
+  // Dedup por spotify_uri DENTRO del lote: si la playlist trae el mismo track repetido,
+  // el upsert con onConflict=spotify_uri revienta ("ON CONFLICT cannot affect row a
+  // second time"). Nos quedamos con una sola fila por URI.
   // OJO: NO incluir year_status. En cartas nuevas cae al default ('pending'); en
   // cartas que ya existían, NO lo pisamos (mantiene 'resolved'/'manual' y su año).
-  const rows = tracks.map((t) => ({
-    spotify_uri: t.spotify_uri,
-    spotify_id: t.spotify_id,
-    isrc: t.isrc,
-    title: t.title,
-    artist: t.artist,
-    spotify_year: t.spotify_year,
-    cover_url: t.cover_url,
-    genres: t.genres ?? null,
-    genre_buckets: t.genreBuckets ?? null,
-    region: t.region ?? null,
-  }));
+  const byUri = new Map<string, Record<string, unknown>>();
+  for (const t of tracks) {
+    if (!t.spotify_uri) continue;
+    byUri.set(t.spotify_uri, {
+      spotify_uri: t.spotify_uri,
+      spotify_id: t.spotify_id,
+      isrc: t.isrc,
+      title: t.title,
+      artist: t.artist,
+      spotify_year: t.spotify_year,
+      cover_url: t.cover_url,
+      genres: t.genres ?? null,
+      genre_buckets: t.genreBuckets ?? null,
+      region: t.region ?? null,
+    });
+  }
+  const rows = [...byUri.values()];
 
   const { data, error } = await supabase
     .from("ct_cards")
     .upsert(rows, { onConflict: "spotify_uri", ignoreDuplicates: false })
     .select("id");
-  if (error) throw error;
+  if (error) throw new Error(error.message ?? JSON.stringify(error));
 
   return { imported: data?.length ?? 0 };
 }

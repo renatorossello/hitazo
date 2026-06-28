@@ -53,6 +53,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ...result, deckName });
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 });
+    const msg = e instanceof Error ? e.message : typeof e === "string" ? e : JSON.stringify(e);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
