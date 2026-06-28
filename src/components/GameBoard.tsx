@@ -36,6 +36,7 @@ export default function GameBoard({
   const firedRef = useRef("");
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [origin, setOrigin] = useState("");
+  const [yearEdit, setYearEdit] = useState<string | null>(null); // null = cerrado
   const router = useRouter();
 
   // Mantener los refs al día sin escribirlos durante el render.
@@ -117,6 +118,13 @@ export default function GameBoard({
   async function resolveWith(metaAwarded: boolean) {
     if (!manual) await player.pause(); // SDK: frena la canción; en manual la pausa el host
     await act("resolve", { metaAwarded });
+  }
+
+  async function saveYear() {
+    const y = Number(yearEdit);
+    if (!Number.isInteger(y) || y < 1900 || y > 2100) return;
+    await act("correct-year", { year: y }); // corrige en la base + reajusta el resultado
+    setYearEdit(null);
   }
 
   async function newGame() {
@@ -331,6 +339,34 @@ export default function GameBoard({
               🃏 La carta es para {state.teams.find((t) => t.id === round.cardWinnerId)?.name ?? "—"}
             </p>
           )}
+          {/* Corregir el año si está claramente mal (reajusta el resultado + queda fijo en la base). */}
+          {isHost && round.phase === "reveal" && (
+            yearEdit === null ? (
+              <button
+                onClick={() => setYearEdit(String(round.reveal!.year))}
+                className="text-xs text-violet-300 underline hover:text-violet-100"
+              >
+                ✏️ ¿el año está mal? Corregir
+              </button>
+            ) : (
+              <div className="flex flex-wrap items-center justify-center gap-2 rounded-xl bg-white/10 px-3 py-2">
+                <span className="text-xs text-violet-200">Año correcto:</span>
+                <input
+                  value={yearEdit}
+                  onChange={(e) => setYearEdit(e.target.value)}
+                  inputMode="numeric"
+                  className="w-20 rounded border border-white/30 bg-white/10 px-2 py-1 text-center font-mono text-lg text-white outline-none"
+                />
+                <button onClick={saveYear} className="rounded-full bg-accent px-4 py-1.5 text-sm font-bold text-brand-deep">
+                  Guardar año
+                </button>
+                <button onClick={() => setYearEdit(null)} className="rounded-full border border-white/30 px-3 py-1.5 text-sm text-violet-200">
+                  cancelar
+                </button>
+              </div>
+            )
+          )}
+
           {isHost && round.phase === "reveal" && (
             <div className="flex flex-col items-center gap-2">
               <p className="text-sm text-violet-200">
