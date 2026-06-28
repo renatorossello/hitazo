@@ -166,12 +166,12 @@ function StatusBanner({
 function RevealOutcome({ round, turnTeam, challengerTeam, state }: { round: StateRound; turnTeam: StateTeam | null; challengerTeam: StateTeam | null; state: GameState }) {
   const winner = round.cardWinnerId ? state.teams.find((t) => t.id === round.cardWinnerId) : null;
   return (
-    <div className="text-[2.2vh] leading-tight">
+    <div className="text-[2.9vh] leading-snug">
       <p>{turnTeam?.name}: <b className={round.placedCorrect ? "text-teal" : "text-red-400"}>{round.placedCorrect ? "bien ✓" : "mal ✗"}</b></p>
       {challengerTeam && (
         <p>{challengerTeam.name}: <b className={round.challengeCorrect ? "text-teal" : "text-red-400"}>{round.challengeCorrect ? "bien ✓" : "mal ✗"}</b></p>
       )}
-      {winner && <p className="font-bold text-teal">🃏 carta para {winner.name}</p>}
+      {winner && <p className="text-[2.4vh] font-bold text-teal">🃏 carta para {winner.name}</p>}
     </div>
   );
 }
@@ -213,9 +213,9 @@ function TeamRow({
         {gap(0)}
         {cards.map((c, i) => (
           <div key={c.cardId} className="flex min-w-0 flex-1 items-stretch">
-            <div className="flex min-w-0 flex-1 flex-col items-center justify-center rounded-[0.7vh] bg-white px-[0.3vw] py-[0.5vh] text-gray-800">
+            <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-[0.6vh] rounded-[0.7vh] bg-white px-[0.4vw] py-[0.5vh] text-gray-800">
               <span className="font-mono text-[2.7vh] font-black leading-none text-brand">{c.year}</span>
-              <span className="mt-[0.3vh] w-full truncate text-center text-[1.5vh] text-gray-500">{c.title}</span>
+              <span className="line-clamp-3 w-full text-center text-[1.9vh] font-medium leading-tight text-gray-600">{c.title}</span>
             </div>
             {gap(i + 1)}
           </div>
